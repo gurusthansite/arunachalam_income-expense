@@ -112,7 +112,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
         <StatCard
           title="Total Income"
-          amount={summary.incomePaise > 0 ? `+${formatINR(summary.incomePaise)}` : formatINR(0)}
+          amount={
+            summary.incomePaise > 0
+              ? `+${formatINR(summary.incomePaise)}`
+              : summary.incomePaise < 0
+                ? `-${formatINR(Math.abs(summary.incomePaise))}`
+                : formatINR(0)
+          }
           subtext={`${summary.transactionCount} total records in period`}
           icon={TrendingUp}
           variant="income"
@@ -120,7 +126,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
         <StatCard
           title="Total Expenses"
-          amount={summary.expensePaise > 0 ? `-${formatINR(summary.expensePaise)}` : formatINR(0)}
+          amount={
+            summary.expensePaise > 0
+              ? `-${formatINR(summary.expensePaise)}`
+              : summary.expensePaise < 0
+                ? `+${formatINR(Math.abs(summary.expensePaise))}`
+                : formatINR(0)
+          }
           subtext="Total organization outflow"
           icon={TrendingDown}
           variant="expense"

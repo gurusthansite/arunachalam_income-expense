@@ -282,6 +282,7 @@ export function TransactionsTable({
                   <TableHead className="w-[100px]">Type</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Party / Payee</TableHead>
+                  <TableHead className="w-[150px]">Contact Number</TableHead>
                   <TableHead>Description & Ref</TableHead>
                   <TableHead>Method</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
@@ -316,12 +317,17 @@ export function TransactionsTable({
                       <TableCell className="text-xs font-medium">
                         {tx.category_name}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground block">{tx.person_name || '—'}</span>
-                        {tx.contact_number && (
-                          <span className="text-[11px] font-mono text-muted-foreground/90 block">
-                            📞 {tx.contact_number}
+                      <TableCell className="text-xs font-medium text-foreground">
+                        {tx.person_name || '—'}
+                      </TableCell>
+                      <TableCell className="text-xs font-mono whitespace-nowrap">
+                        {tx.contact_number ? (
+                          <span className="inline-flex items-center gap-1.5 text-foreground font-medium">
+                            <span className="text-muted-foreground text-xs">📞</span>
+                            <span>{tx.contact_number}</span>
                           </span>
+                        ) : (
+                          <span className="text-muted-foreground/60">—</span>
                         )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
@@ -339,10 +345,17 @@ export function TransactionsTable({
                       </TableCell>
                       <TableCell
                         className={`text-right font-mono text-xs font-semibold whitespace-nowrap ${
-                          isIncome ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                          (tx.type === 'income' ? tx.amountPaise >= 0 : tx.amountPaise < 0)
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-rose-700 dark:text-rose-400'
                         }`}
                       >
-                        {isIncome ? '+' : '-'}{formatINR(tx.amountPaise)}
+                        {(() => {
+                          const isIncome = tx.type === 'income'
+                          const isNegative = tx.amountPaise < 0
+                          const sign = isIncome ? (isNegative ? '-' : '+') : (isNegative ? '+' : '-')
+                          return `${sign}${formatINR(Math.abs(tx.amountPaise))}`
+                        })()}
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">

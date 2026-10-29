@@ -93,10 +93,17 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
                       </TableCell>
                       <TableCell
                         className={`text-right font-mono text-xs font-semibold whitespace-nowrap ${
-                          isIncome ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+                          (tx.type === 'income' ? tx.amountPaise >= 0 : tx.amountPaise < 0)
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-rose-700 dark:text-rose-400'
                         }`}
                       >
-                        {isIncome ? '+' : '-'}{formatINR(tx.amountPaise)}
+                        {(() => {
+                          const isIncome = tx.type === 'income'
+                          const isNegative = tx.amountPaise < 0
+                          const sign = isIncome ? (isNegative ? '-' : '+') : (isNegative ? '+' : '-')
+                          return `${sign}${formatINR(Math.abs(tx.amountPaise))}`
+                        })()}
                       </TableCell>
                     </TableRow>
                   )

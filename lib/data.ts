@@ -61,19 +61,24 @@ export async function getCategories(opts?: { activeOnly?: boolean }): Promise<Ca
 }
 
 function mapGTransactions(rawList: any[]): Transaction[] {
-  return rawList.map((t: any) => ({
-    id: String(t.id),
-    transaction_date: normalizeDate(t.transaction_date),
-    type: String(t.type || 'expense').toLowerCase() as TxType,
-    amountPaise: toPaise(t.amount),
-    category_id: String(t.category_id || t.category_name || ''),
-    category_name: String(t.category_name || 'Uncategorized'),
-    person_name: t.person_name ? String(t.person_name) : null,
-    contact_number: t.contact_number ? String(t.contact_number) : null,
-    payment_method: String(t.payment_method || 'Cash'),
-    reference_number: t.reference_number ? String(t.reference_number) : null,
-    description: t.description ? String(t.description) : null,
-  }))
+  return rawList.map((t: any) => {
+    let contact = t.contact_number ? String(t.contact_number).replace(/^'/, '').trim() : null
+    if (contact === '#ERROR!' || contact === '') contact = null
+
+    return {
+      id: String(t.id),
+      transaction_date: normalizeDate(t.transaction_date),
+      type: String(t.type || 'expense').toLowerCase() as TxType,
+      amountPaise: toPaise(t.amount),
+      category_id: String(t.category_id || t.category_name || ''),
+      category_name: String(t.category_name || 'Uncategorized'),
+      person_name: t.person_name ? String(t.person_name) : null,
+      contact_number: contact,
+      payment_method: String(t.payment_method || 'Cash'),
+      reference_number: t.reference_number ? String(t.reference_number) : null,
+      description: t.description ? String(t.description) : null,
+    }
+  })
 }
 
 export async function getCategoriesWithUsage(): Promise<CategoryWithUsage[]> {

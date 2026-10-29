@@ -80,6 +80,27 @@ export async function postGoogleSheetsAction(payload: any) {
       }
       data.transactions = [newTx, ...(data.transactions || [])]
       memoryCache = { data, timestamp: now }
+    } else if (payload.action === 'updateTransaction') {
+      if (data.transactions) {
+        data.transactions = data.transactions.map((t: any) => {
+          if (String(t.id) === String(payload.id)) {
+            return {
+              ...t,
+              transaction_date: payload.date || t.transaction_date,
+              type: payload.type ? String(payload.type).toLowerCase() : t.type,
+              amount: payload.amount !== undefined ? Number(payload.amount) : t.amount,
+              category_name: payload.category || t.category_name,
+              person_name: payload.party !== undefined ? (payload.party || null) : t.person_name,
+              contact_number: payload.contactNumber !== undefined ? (payload.contactNumber || null) : t.contact_number,
+              payment_method: payload.paymentMethod || t.payment_method,
+              reference_number: payload.referenceNumber !== undefined ? (payload.referenceNumber || null) : t.reference_number,
+              description: payload.description !== undefined ? (payload.description || null) : t.description,
+            }
+          }
+          return t
+        })
+      }
+      memoryCache = { data, timestamp: now }
     } else if (payload.action === 'deleteTransaction') {
       if (data.transactions) {
         data.transactions = data.transactions.filter((t: any) => String(t.id) !== String(payload.id))
@@ -90,6 +111,14 @@ export async function postGoogleSheetsAction(payload: any) {
 
   const url = getGoogleSheetsScriptUrl()
   if (!url) return null
+
+  // Ensure phone numbers starting with + or 0 are treated as text by Google Sheets
+  if (payload.contactNumber && typeof payload.contactNumber === 'string') {
+    const trimmed = payload.contactNumber.trim()
+    if ((trimmed.startsWith('+') || trimmed.startsWith('0')) && !trimmed.startsWith("'")) {
+      payload.contactNumber = `'${trimmed}`
+    }
+  }
 
   try {
     const res = await fetch(url, {

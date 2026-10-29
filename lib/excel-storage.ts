@@ -90,6 +90,7 @@ export async function ensureLedgerFile(): Promise<void> {
     { header: 'CategoryID', key: 'category_id', width: 20 },
     { header: 'CategoryName', key: 'category_name', width: 26 },
     { header: 'PersonName', key: 'person_name', width: 24 },
+    { header: 'ContactNumber', key: 'contact_number', width: 18 },
     { header: 'PaymentMethod', key: 'payment_method', width: 16 },
     { header: 'ReferenceNumber', key: 'reference_number', width: 20 },
     { header: 'Description', key: 'description', width: 34 },
@@ -238,7 +239,7 @@ function readTransactionsFromWb(wb: ExcelJS.Workbook): Transaction[] {
       const type = cellValueToString(row.getCell(3).value).toLowerCase() as TxType
       const amountPaise = toPaise(row.getCell(4).value as any)
 
-      if (id && transaction_date && amountPaise > 0) {
+      if (id && transaction_date) {
         transactions.push({
           id,
           transaction_date,
@@ -749,19 +750,54 @@ export async function createTransaction(input: {
     const amountNum = Number(input.amount)
     const amountPaise = toPaise(input.amount)
 
-    txSheet.addRow([
-      id,
-      input.transaction_date,
-      input.type,
-      amountNum,
-      input.category_id,
-      categoryName,
-      input.person_name || '',
-      input.payment_method,
-      input.reference_number || '',
-      input.description || '',
-      new Date().toISOString(),
-    ])
+    // Check if header row contains ContactNumber
+    let hasContactCol = false
+    const headerRow = txSheet.getRow(1)
+    if (headerRow) {
+      headerRow.eachCell((cell) => {
+        if (cellValueToString(cell.value).toLowerCase().includes('contact')) {
+          hasContactCol = true
+        }
+      })
+    }
+
+    if (hasContactCol) {
+      txSheet.addRow([
+        id,
+        input.transaction_date,
+        input.type,
+        amountNum,
+        input.category_id,
+        categoryName,
+        input.person_name || '',
+        input.contact_number || '',
+        input.payment_method,
+        input.reference_number || '',
+        input.description || '',
+        new Date().toISOString(),
+      ])
+    } else {
+      // Auto-migrate local sheet header if missing
+      headerRow.getCell(8).value = 'ContactNumber'
+      headerRow.getCell(9).value = 'PaymentMethod'
+      headerRow.getCell(10).value = 'ReferenceNumber'
+      headerRow.getCell(11).value = 'Description'
+      headerRow.getCell(12).value = 'CreatedAt'
+      txSheet.addRow([
+        id,
+        input.transaction_date,
+        input.type,
+        amountNum,
+        input.category_id,
+        categoryName,
+        input.person_name || '',
+        input.contact_number || '',
+        input.payment_method,
+        input.reference_number || '',
+        input.description || '',
+        new Date().toISOString(),
+      ])
+    }
 
     addAuditEntry(
       wb,
@@ -829,6 +865,16 @@ export async function updateTransaction(
     const amountNum = Number(input.amount)
     const amountPaise = toPaise(input.amount)
 
+    let hasContactCol = false
+    const headerRow = txSheet.getRow(1)
+    if (headerRow) {
+      headerRow.eachCell((cell) => {
+        if (cellValueToString(cell.value).toLowerCase().includes('contact')) {
+          hasContactCol = true
+        }
+      })
+    }
+
     const row = foundRow as ExcelJS.Row
     row.getCell(2).value = input.transaction_date
     row.getCell(3).value = input.type
@@ -836,9 +882,16 @@ export async function updateTransaction(
     row.getCell(5).value = input.category_id
     row.getCell(6).value = categoryName
     row.getCell(7).value = input.person_name || ''
-    row.getCell(8).value = input.payment_method
-    row.getCell(9).value = input.reference_number || ''
-    row.getCell(10).value = input.description || ''
+    if (hasContactCol) {
+      row.getCell(8).value = input.contact_number || ''
+      row.getCell(9).value = input.payment_method
+      row.getCell(10).value = input.reference_number || ''
+      row.getCell(11).value = input.description || ''
+    } else {
+      row.getCell(8).value = input.payment_method
+      row.getCell(9).value = input.reference_number || ''
+      row.getCell(10).value = input.description || ''
+    }
 
     addAuditEntry(
       wb,

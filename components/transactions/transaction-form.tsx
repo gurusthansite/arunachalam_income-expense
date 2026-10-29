@@ -193,7 +193,7 @@ export function TransactionForm({
             label="Amount (in INR ₹)"
             required
             error={fieldErrors.amount}
-            hint="Enter positive amount, up to 2 decimal places"
+            hint="Enter amount (positive, zero, or negative e.g. -500)"
           >
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-muted-foreground font-medium">₹</span>

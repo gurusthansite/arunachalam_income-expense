@@ -7,9 +7,43 @@ function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('Ledger App')
     .addItem('Setup All Sheets', 'setupCompleteSheeting')
+    .addItem('Add Contact Number Column', 'addContactNumberColumn')
     .addItem('Re-apply Formatting', 'setupCompleteSheeting')
     .addItem('Add Sample Transactions', 'addSampleTransactions')
     .addToUi();
+}
+
+/**
+ * 1-Click Function to insert ContactNumber into Column G
+ * Keeps all existing rows 100% safe!
+ */
+function addContactNumberColumn() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
+
+  var firstRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  var hasContact = false;
+  for (var c = 0; c < firstRow.length; c++) {
+    if (String(firstRow[c] || '').toLowerCase().indexOf('contact') >= 0) {
+      hasContact = true;
+      break;
+    }
+  }
+
+  if (!hasContact) {
+    // Inserts Column G right after Party (Column F)
+    sheet.insertColumnAfter(6);
+    sheet.getRange(1, 7).setValue('ContactNumber')
+      .setFontWeight('bold')
+      .setFontColor('#ffffff')
+      .setBackground('#1e293b')
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle');
+    sheet.setColumnWidth(7, 150);
+    sheet.getRange('G2:G').setNumberFormat('@').setHorizontalAlignment('left');
+  }
+
+  SpreadsheetApp.flush();
 }
 
 /**
@@ -385,7 +419,7 @@ function doPost(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
     if (action === 'addTransaction') {
-      var sheet = ss.getSheetByName('Transactions');
+      var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
       if (!sheet) return jsonResponse({ ok: false, error: 'Transactions sheet not found' });
 
       var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
@@ -397,43 +431,45 @@ function doPost(e) {
         }
       }
 
-      var id = 'tx_' + new Date().getTime() + '_' + Math.floor(Math.random() * 1000);
-      var row = [];
-      if (hasContact) {
-        row = [
-          id,
-          payload.date,
-          String(payload.type).toLowerCase(),
-          Number(payload.amount),
-          payload.category || 'Uncategorized',
-          payload.party || '',
-          payload.contactNumber || '',
-          payload.paymentMethod || 'Cash',
-          payload.referenceNumber || '',
-          payload.description || '',
-          new Date().toISOString()
-        ];
-      } else {
-        row = [
-          id,
-          payload.date,
-          String(payload.type).toLowerCase(),
-          Number(payload.amount),
-          payload.category || 'Uncategorized',
-          payload.party || '',
-          payload.paymentMethod || 'Cash',
-          payload.referenceNumber || '',
-          payload.description || '',
-          new Date().toISOString()
-        ];
+      // If ContactNumber column is not there yet, auto-insert it right now!
+      if (!hasContact && sheet.getLastColumn() >= 6) {
+        sheet.insertColumnAfter(6);
+        sheet.getRange(1, 7).setValue('ContactNumber')
+          .setFontWeight('bold')
+          .setFontColor('#ffffff')
+          .setBackground('#1e293b')
+          .setHorizontalAlignment('center')
+          .setVerticalAlignment('middle');
+        sheet.setColumnWidth(7, 150);
+        sheet.getRange('G2:G').setNumberFormat('@').setHorizontalAlignment('left');
+        hasContact = true;
       }
+
+      var id = 'tx_' + new Date().getTime() + '_' + Math.floor(Math.random() * 1000);
+      var contactVal = payload.contactNumber ? String(payload.contactNumber).trim() : '';
+      if (contactVal && (contactVal.indexOf('+') === 0 || contactVal.indexOf('0') === 0)) {
+        contactVal = "'" + contactVal;
+      }
+      var row = [
+        id,
+        payload.date,
+        String(payload.type).toLowerCase(),
+        Number(payload.amount),
+        payload.category || 'Uncategorized',
+        payload.party || '',
+        contactVal,
+        payload.paymentMethod || 'Cash',
+        payload.referenceNumber || '',
+        payload.description || '',
+        new Date().toISOString()
+      ];
 
       sheet.appendRow(row);
       return jsonResponse({ ok: true, id: id, message: 'Transaction recorded in Sheet' });
     }
 
     if (action === 'updateTransaction') {
-      var sheet = ss.getSheetByName('Transactions');
+      var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
       if (!sheet) return jsonResponse({ ok: false, error: 'Transactions sheet not found' });
 
       var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
@@ -454,7 +490,11 @@ function doPost(e) {
           if (payload.party !== undefined && colMap['party']) sheet.getRange(rowNum, colMap['party']).setValue(payload.party);
           if (payload.contactNumber !== undefined && (colMap['contactnumber'] || colMap['contact'])) {
             var cCol = colMap['contactnumber'] || colMap['contact'];
-            sheet.getRange(rowNum, cCol).setValue(payload.contactNumber);
+            var cVal = String(payload.contactNumber || '').trim();
+            if (cVal && (cVal.indexOf('+') === 0 || cVal.indexOf('0') === 0)) {
+              cVal = "'" + cVal;
+            }
+            sheet.getRange(rowNum, cCol).setValue(cVal);
           }
           if (payload.paymentMethod && colMap['paymentmethod']) sheet.getRange(rowNum, colMap['paymentmethod']).setValue(payload.paymentMethod);
           if (payload.referenceNumber !== undefined && colMap['referencenumber']) sheet.getRange(rowNum, colMap['referencenumber']).setValue(payload.referenceNumber);
@@ -466,7 +506,7 @@ function doPost(e) {
     }
 
     if (action === 'deleteTransaction') {
-      var sheet = ss.getSheetByName('Transactions');
+      var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
       if (!sheet) return jsonResponse({ ok: false, error: 'Transactions sheet not found' });
 
       var data = sheet.getDataRange().getValues();
@@ -534,7 +574,7 @@ function getCategoriesData(ss) {
 
 function getTransactionsData(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Transactions');
+  var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
   if (!sheet) return [];
   var rows = sheet.getDataRange().getValues();
   if (rows.length <= 1) return [];
@@ -580,7 +620,7 @@ function getTransactionsData(ss) {
       amount: Number(r[amtIdx] || 0),
       category_name: String(r[catIdx] || 'Uncategorized'),
       person_name: partyIdx >= 0 && r[partyIdx] ? String(r[partyIdx]) : null,
-      contact_number: contactIdx >= 0 && r[contactIdx] ? String(r[contactIdx]) : null,
+      contact_number: contactIdx >= 0 && r[contactIdx] ? String(r[contactIdx]).replace(/^'/, '').trim() : null,
       payment_method: methodIdx >= 0 && r[methodIdx] ? String(r[methodIdx]) : 'Cash',
       reference_number: refIdx >= 0 && r[refIdx] ? String(r[refIdx]) : null,
       description: descIdx >= 0 && r[descIdx] ? String(r[descIdx]) : null,

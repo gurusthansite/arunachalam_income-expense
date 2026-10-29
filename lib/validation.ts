@@ -23,8 +23,7 @@ export const transactionSchema = z.object({
   amount: z
     .string()
     .transform(normalizeAmountInput)
-    .refine((v) => AMOUNT_PATTERN.test(v), 'Enter a valid amount with up to 2 decimals')
-    .refine((v) => Number(v) > 0, 'Amount must be greater than zero'),
+    .refine((v) => SIGNED_AMOUNT_PATTERN.test(v), 'Enter a valid amount with up to 2 decimals'),
   category_id: z.string().min(1, 'Select a category'),
   payment_method: z.enum(
     PAYMENT_METHODS.map((m) => m.value) as [string, ...string[]],
