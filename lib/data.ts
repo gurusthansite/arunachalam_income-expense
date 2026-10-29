@@ -69,6 +69,7 @@ function mapGTransactions(rawList: any[]): Transaction[] {
     category_id: String(t.category_id || t.category_name || ''),
     category_name: String(t.category_name || 'Uncategorized'),
     person_name: t.person_name ? String(t.person_name) : null,
+    contact_number: t.contact_number ? String(t.contact_number) : null,
     payment_method: String(t.payment_method || 'Cash'),
     reference_number: t.reference_number ? String(t.reference_number) : null,
     description: t.description ? String(t.description) : null,
@@ -341,6 +342,7 @@ export async function getTransactions(filters: excelStorage.TransactionFilters) 
           t.category_name.toLowerCase().includes(q) ||
           (t.description && t.description.toLowerCase().includes(q)) ||
           (t.person_name && t.person_name.toLowerCase().includes(q)) ||
+          (t.contact_number && t.contact_number.toLowerCase().includes(q)) ||
           (t.reference_number && t.reference_number.toLowerCase().includes(q))
       )
     }

@@ -221,6 +221,16 @@ function readTransactionsFromWb(wb: ExcelJS.Workbook): Transaction[] {
   const sheet = wb.getWorksheet('Transactions')
   const transactions: Transaction[] = []
   if (sheet) {
+    let hasContactCol = false
+    const headerRow = sheet.getRow(1)
+    if (headerRow) {
+      headerRow.eachCell((cell) => {
+        if (cellValueToString(cell.value).toLowerCase().includes('contact')) {
+          hasContactCol = true
+        }
+      })
+    }
+
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return
       const id = cellValueToString(row.getCell(1).value)
@@ -237,9 +247,10 @@ function readTransactionsFromWb(wb: ExcelJS.Workbook): Transaction[] {
           category_id: cellValueToString(row.getCell(5).value),
           category_name: cellValueToString(row.getCell(6).value) || 'Uncategorized',
           person_name: cellValueToString(row.getCell(7).value) || null,
-          payment_method: cellValueToString(row.getCell(8).value) || 'other',
-          reference_number: cellValueToString(row.getCell(9).value) || null,
-          description: cellValueToString(row.getCell(10).value) || null,
+          contact_number: hasContactCol ? cellValueToString(row.getCell(8).value) || null : null,
+          payment_method: cellValueToString(row.getCell(hasContactCol ? 9 : 8).value) || 'other',
+          reference_number: cellValueToString(row.getCell(hasContactCol ? 10 : 9).value) || null,
+          description: cellValueToString(row.getCell(hasContactCol ? 11 : 10).value) || null,
         })
       }
     })
@@ -714,6 +725,7 @@ export async function createTransaction(input: {
   category_id: string
   payment_method: string
   person_name?: string | null
+  contact_number?: string | null
   description?: string | null
   reference_number?: string | null
 }): Promise<Transaction> {
@@ -783,6 +795,7 @@ export async function updateTransaction(
     category_id: string
     payment_method: string
     person_name?: string | null
+    contact_number?: string | null
     description?: string | null
     reference_number?: string | null
   }

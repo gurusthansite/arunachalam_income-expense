@@ -317,7 +317,12 @@ export function TransactionsTable({
                         {tx.category_name}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {tx.person_name || '—'}
+                        <span className="font-medium text-foreground block">{tx.person_name || '—'}</span>
+                        {tx.contact_number && (
+                          <span className="text-[11px] font-mono text-muted-foreground/90 block">
+                            📞 {tx.contact_number}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
                         {tx.description ? (

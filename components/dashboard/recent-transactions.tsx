@@ -81,7 +81,12 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
                       </TableCell>
                       <TableCell className="text-xs font-medium">{tx.category_name}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {tx.person_name || '—'}
+                        <span className="text-foreground block">{tx.person_name || '—'}</span>
+                        {tx.contact_number && (
+                          <span className="text-[11px] font-mono text-muted-foreground/80 block">
+                            📞 {tx.contact_number}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {paymentMethodLabel(tx.payment_method)}

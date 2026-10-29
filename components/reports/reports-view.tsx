@@ -281,7 +281,12 @@ export function ReportsView({
                                 {tx.category_name}
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">
-                                {tx.person_name || '—'}
+                                <span className="text-foreground block">{tx.person_name || '—'}</span>
+                                {tx.contact_number && (
+                                  <span className="text-[11px] font-mono text-muted-foreground/80 block">
+                                    📞 {tx.contact_number}
+                                  </span>
+                                )}
                               </TableCell>
                               <TableCell className="text-xs">
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-muted text-muted-foreground border">

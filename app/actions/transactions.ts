@@ -40,6 +40,7 @@ export async function createTransaction(input: TransactionInput): Promise<Action
         amount: values.amount,
         category: catCheck.name,
         party: values.person_name || '',
+        contactNumber: values.contact_number || '',
         paymentMethod: values.payment_method,
         referenceNumber: values.reference_number || '',
         description: values.description || '',
@@ -58,6 +59,7 @@ export async function createTransaction(input: TransactionInput): Promise<Action
         category_id: values.category_id,
         payment_method: values.payment_method,
         person_name: values.person_name,
+        contact_number: values.contact_number,
         description: values.description,
         reference_number: values.reference_number,
       })
@@ -95,6 +97,7 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
         amount: values.amount,
         category: catCheck.name,
         party: values.person_name || '',
+        contactNumber: values.contact_number || '',
         paymentMethod: values.payment_method,
         referenceNumber: values.reference_number || '',
         description: values.description || '',
@@ -112,6 +115,7 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
         category_id: values.category_id,
         payment_method: values.payment_method,
         person_name: values.person_name,
+        contact_number: values.contact_number,
         description: values.description,
         reference_number: values.reference_number,
       })

@@ -31,6 +31,7 @@ export const transactionSchema = z.object({
     { message: 'Select a payment method' },
   ),
   person_name: optionalText(120),
+  contact_number: optionalText(30),
   description: optionalText(500),
   reference_number: optionalText(60),
 })

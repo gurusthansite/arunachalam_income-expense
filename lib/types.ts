@@ -32,6 +32,7 @@ export type Transaction = {
   category_id: string
   category_name: string
   person_name: string | null
+  contact_number?: string | null
   payment_method: string
   description: string | null
   reference_number: string | null

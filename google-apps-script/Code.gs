@@ -99,16 +99,16 @@ function setupSummarySheet(ss) {
   sheet.getRange('F5').setValue('Net Balance / In-Hand').setFontWeight('bold').setHorizontalAlignment('right');
 
   sheet.getRange('E6').setValue('Cash In Hand');
-  sheet.getRange('F6').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!G2:G, "Cash") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!G2:G, "Cash")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange('F6').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!H2:H, "Cash") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!H2:H, "Cash")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
   sheet.getRange('E7').setValue('UPI Balance Flow');
-  sheet.getRange('F7').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!G2:G, "UPI") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!G2:G, "UPI")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange('F7').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!H2:H, "UPI") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!H2:H, "UPI")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
   sheet.getRange('E8').setValue('Bank Transfer Flow');
-  sheet.getRange('F8').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!G2:G, "Bank Transfer") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!G2:G, "Bank Transfer")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange('F8').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!H2:H, "Bank Transfer") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!H2:H, "Bank Transfer")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
   sheet.getRange('E9').setValue('Card / Others');
-  sheet.getRange('F9').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!G2:G, "Card") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!G2:G, "Card")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange('F9').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!H2:H, "Card") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!H2:H, "Card")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
   // Block 3: Category Summaries Header
   sheet.getRange('B10:C10').merge()
@@ -175,6 +175,21 @@ function setupTransactionsSheet(ss) {
     sheet = ss.insertSheet('Transactions', 0);
   }
 
+  // Auto-migrate: If sheet already exists without ContactNumber, insert column G
+  if (sheet.getLastColumn() >= 6) {
+    var firstRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var hasContact = false;
+    for (var c = 0; c < firstRow.length; c++) {
+      if (String(firstRow[c] || '').toLowerCase().indexOf('contact') >= 0) {
+        hasContact = true;
+        break;
+      }
+    }
+    if (!hasContact) {
+      sheet.insertColumnAfter(6); // Inserts column G right after Party
+    }
+  }
+
   var headers = [
     'ID',
     'Date',
@@ -182,6 +197,7 @@ function setupTransactionsSheet(ss) {
     'Amount',
     'Category',
     'Party',
+    'ContactNumber',
     'PaymentMethod',
     'ReferenceNumber',
     'Description',
@@ -199,7 +215,7 @@ function setupTransactionsSheet(ss) {
   sheet.setRowHeight(1, 35);
   sheet.setFrozenRows(1);
 
-  var widths = [130, 110, 95, 125, 160, 180, 130, 150, 240, 180];
+  var widths = [130, 110, 95, 125, 160, 180, 150, 130, 150, 240, 180];
   for (var i = 0; i < widths.length; i++) {
     sheet.setColumnWidth(i + 1, widths[i]);
   }
@@ -214,13 +230,15 @@ function setupTransactionsSheet(ss) {
 
   sheet.getRange('D2:D').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
+  sheet.getRange('G2:G').setNumberFormat('@').setHorizontalAlignment('left');
+
   var methodRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'], true)
     .setAllowInvalid(false)
     .build();
-  sheet.getRange('G2:G').setDataValidation(methodRule).setHorizontalAlignment('center');
+  sheet.getRange('H2:H').setDataValidation(methodRule).setHorizontalAlignment('center');
 
-  sheet.getRange('J2:J').setNumberFormat('yyyy-mm-dd hh:mm:ss');
+  sheet.getRange('K2:K').setNumberFormat('yyyy-mm-dd hh:mm:ss');
 }
 
 function setupCategoriesSheet(ss) {
@@ -370,19 +388,45 @@ function doPost(e) {
       var sheet = ss.getSheetByName('Transactions');
       if (!sheet) return jsonResponse({ ok: false, error: 'Transactions sheet not found' });
 
+      var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+      var hasContact = false;
+      for (var c = 0; c < headers.length; c++) {
+        if (String(headers[c] || '').toLowerCase().indexOf('contact') >= 0) {
+          hasContact = true;
+          break;
+        }
+      }
+
       var id = 'tx_' + new Date().getTime() + '_' + Math.floor(Math.random() * 1000);
-      var row = [
-        id,
-        payload.date,
-        String(payload.type).toLowerCase(),
-        Number(payload.amount),
-        payload.category || 'Uncategorized',
-        payload.party || '',
-        payload.paymentMethod || 'Cash',
-        payload.referenceNumber || '',
-        payload.description || '',
-        new Date().toISOString()
-      ];
+      var row = [];
+      if (hasContact) {
+        row = [
+          id,
+          payload.date,
+          String(payload.type).toLowerCase(),
+          Number(payload.amount),
+          payload.category || 'Uncategorized',
+          payload.party || '',
+          payload.contactNumber || '',
+          payload.paymentMethod || 'Cash',
+          payload.referenceNumber || '',
+          payload.description || '',
+          new Date().toISOString()
+        ];
+      } else {
+        row = [
+          id,
+          payload.date,
+          String(payload.type).toLowerCase(),
+          Number(payload.amount),
+          payload.category || 'Uncategorized',
+          payload.party || '',
+          payload.paymentMethod || 'Cash',
+          payload.referenceNumber || '',
+          payload.description || '',
+          new Date().toISOString()
+        ];
+      }
 
       sheet.appendRow(row);
       return jsonResponse({ ok: true, id: id, message: 'Transaction recorded in Sheet' });
@@ -392,18 +436,29 @@ function doPost(e) {
       var sheet = ss.getSheetByName('Transactions');
       if (!sheet) return jsonResponse({ ok: false, error: 'Transactions sheet not found' });
 
+      var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+      var colMap = {};
+      for (var h = 0; h < headers.length; h++) {
+        var key = String(headers[h] || '').toLowerCase().replace(/[^a-z]/g, '');
+        colMap[key] = h + 1; // 1-based column index
+      }
+
       var data = sheet.getDataRange().getValues();
       for (var i = 1; i < data.length; i++) {
         if (String(data[i][0]) === String(payload.id)) {
           var rowNum = i + 1;
-          if (payload.date) sheet.getRange(rowNum, 2).setValue(payload.date);
-          if (payload.type) sheet.getRange(rowNum, 3).setValue(String(payload.type).toLowerCase());
-          if (payload.amount !== undefined) sheet.getRange(rowNum, 4).setValue(Number(payload.amount));
-          if (payload.category) sheet.getRange(rowNum, 5).setValue(payload.category);
-          if (payload.party !== undefined) sheet.getRange(rowNum, 6).setValue(payload.party);
-          if (payload.paymentMethod) sheet.getRange(rowNum, 7).setValue(payload.paymentMethod);
-          if (payload.referenceNumber !== undefined) sheet.getRange(rowNum, 8).setValue(payload.referenceNumber);
-          if (payload.description !== undefined) sheet.getRange(rowNum, 9).setValue(payload.description);
+          if (payload.date && colMap['date']) sheet.getRange(rowNum, colMap['date']).setValue(payload.date);
+          if (payload.type && colMap['type']) sheet.getRange(rowNum, colMap['type']).setValue(String(payload.type).toLowerCase());
+          if (payload.amount !== undefined && colMap['amount']) sheet.getRange(rowNum, colMap['amount']).setValue(Number(payload.amount));
+          if (payload.category && colMap['category']) sheet.getRange(rowNum, colMap['category']).setValue(payload.category);
+          if (payload.party !== undefined && colMap['party']) sheet.getRange(rowNum, colMap['party']).setValue(payload.party);
+          if (payload.contactNumber !== undefined && (colMap['contactnumber'] || colMap['contact'])) {
+            var cCol = colMap['contactnumber'] || colMap['contact'];
+            sheet.getRange(rowNum, cCol).setValue(payload.contactNumber);
+          }
+          if (payload.paymentMethod && colMap['paymentmethod']) sheet.getRange(rowNum, colMap['paymentmethod']).setValue(payload.paymentMethod);
+          if (payload.referenceNumber !== undefined && colMap['referencenumber']) sheet.getRange(rowNum, colMap['referencenumber']).setValue(payload.referenceNumber);
+          if (payload.description !== undefined && colMap['description']) sheet.getRange(rowNum, colMap['description']).setValue(payload.description);
           return jsonResponse({ ok: true, message: 'Transaction updated in Sheet' });
         }
       }
@@ -482,13 +537,25 @@ function getTransactionsData(ss) {
   var sheet = ss.getSheetByName('Transactions');
   if (!sheet) return [];
   var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return [];
+
+  var headers = rows[0];
+  var colMap = {};
+  for (var h = 0; h < headers.length; h++) {
+    var key = String(headers[h] || '').toLowerCase().replace(/[^a-z]/g, '');
+    colMap[key] = h;
+  }
+
   var transactions = [];
 
   for (var i = 1; i < rows.length; i++) {
-    var id = String(rows[i][0] || '').trim();
+    var r = rows[i];
+    var idIdx = colMap['id'] !== undefined ? colMap['id'] : 0;
+    var id = String(r[idIdx] || '').trim();
     if (!id) continue;
 
-    var dt = rows[i][1];
+    var dateIdx = colMap['date'] !== undefined ? colMap['date'] : 1;
+    var dt = r[dateIdx];
     var dateStr = '';
     if (dt instanceof Date) {
       dateStr = Utilities.formatDate(dt, Session.getScriptTimeZone(), 'yyyy-MM-dd');
@@ -496,17 +563,28 @@ function getTransactionsData(ss) {
       dateStr = String(dt || '');
     }
 
+    var typeIdx = colMap['type'] !== undefined ? colMap['type'] : 2;
+    var amtIdx = colMap['amount'] !== undefined ? colMap['amount'] : 3;
+    var catIdx = colMap['category'] !== undefined ? colMap['category'] : 4;
+    var partyIdx = colMap['party'] !== undefined ? colMap['party'] : 5;
+    var contactIdx = colMap['contactnumber'] !== undefined ? colMap['contactnumber'] : (colMap['contact'] !== undefined ? colMap['contact'] : (colMap['phone'] !== undefined ? colMap['phone'] : -1));
+    var methodIdx = colMap['paymentmethod'] !== undefined ? colMap['paymentmethod'] : (contactIdx === -1 ? 6 : 7);
+    var refIdx = colMap['referencenumber'] !== undefined ? colMap['referencenumber'] : (contactIdx === -1 ? 7 : 8);
+    var descIdx = colMap['description'] !== undefined ? colMap['description'] : (contactIdx === -1 ? 8 : 9);
+    var createdIdx = colMap['createdat'] !== undefined ? colMap['createdat'] : (contactIdx === -1 ? 9 : 10);
+
     transactions.push({
       id: id,
       transaction_date: dateStr,
-      type: String(rows[i][2] || 'expense').toLowerCase(),
-      amount: Number(rows[i][3] || 0),
-      category_name: String(rows[i][4] || 'Uncategorized'),
-      person_name: rows[i][5] ? String(rows[i][5]) : null,
-      payment_method: String(rows[i][6] || 'Cash'),
-      reference_number: rows[i][7] ? String(rows[i][7]) : null,
-      description: rows[i][8] ? String(rows[i][8]) : null,
-      created_at: rows[i][9] ? String(rows[i][9]) : ''
+      type: String(r[typeIdx] || 'expense').toLowerCase(),
+      amount: Number(r[amtIdx] || 0),
+      category_name: String(r[catIdx] || 'Uncategorized'),
+      person_name: partyIdx >= 0 && r[partyIdx] ? String(r[partyIdx]) : null,
+      contact_number: contactIdx >= 0 && r[contactIdx] ? String(r[contactIdx]) : null,
+      payment_method: methodIdx >= 0 && r[methodIdx] ? String(r[methodIdx]) : 'Cash',
+      reference_number: refIdx >= 0 && r[refIdx] ? String(r[refIdx]) : null,
+      description: descIdx >= 0 && r[descIdx] ? String(r[descIdx]) : null,
+      created_at: createdIdx >= 0 && r[createdIdx] ? String(r[createdIdx]) : ''
     });
   }
   return transactions;

@@ -72,6 +72,7 @@ export async function postGoogleSheetsAction(payload: any) {
         amount: Number(payload.amount),
         category_name: payload.category || 'Uncategorized',
         person_name: payload.party || null,
+        contact_number: payload.contactNumber || null,
         payment_method: payload.paymentMethod || 'Cash',
         reference_number: payload.referenceNumber || null,
         description: payload.description || null,

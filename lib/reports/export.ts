@@ -52,6 +52,7 @@ export function exportToCSV({
     'Type',
     'Category',
     'Party / Person',
+    'Contact Number',
     'Payment Method',
     'Reference #',
     'Description',
@@ -74,6 +75,7 @@ export function exportToCSV({
       isIncome ? 'Income' : 'Expense',
       tx.category_name,
       tx.person_name || '',
+      tx.contact_number || '',
       paymentMethodLabel(tx.payment_method),
       tx.reference_number || '',
       tx.description || '',
@@ -143,6 +145,7 @@ export async function exportToExcel({
     { header: 'Type', key: 'type', width: 10 },
     { header: 'Category', key: 'category', width: 22 },
     { header: 'Party / Person', key: 'person', width: 22 },
+    { header: 'Contact #', key: 'contact', width: 16 },
     { header: 'Method', key: 'method', width: 15 },
     { header: 'Reference #', key: 'ref', width: 18 },
     { header: 'Description', key: 'desc', width: 30 },
@@ -162,6 +165,7 @@ export async function exportToExcel({
       type: isIncome ? 'Income' : 'Expense',
       category: tx.category_name,
       person: tx.person_name || '',
+      contact: tx.contact_number || '',
       method: paymentMethodLabel(tx.payment_method),
       ref: tx.reference_number || '',
       desc: tx.description || '',
@@ -258,11 +262,17 @@ export function exportToPDF({
     if (isIncome) runningBalance += tx.amountPaise
     else runningBalance -= tx.amountPaise
 
+    const partyDisplay = tx.person_name
+      ? tx.contact_number
+        ? `${tx.person_name} (${tx.contact_number})`
+        : tx.person_name
+      : '—'
+
     txRows.push([
       formatDate(tx.transaction_date),
       isIncome ? 'Income' : 'Expense',
       tx.category_name,
-      tx.person_name || '—',
+      partyDisplay,
       isIncome ? formatINRAscii(tx.amountPaise) : '—',
       !isIncome ? formatINRAscii(tx.amountPaise) : '—',
       formatINRAscii(runningBalance),

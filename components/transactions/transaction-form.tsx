@@ -50,6 +50,7 @@ export function TransactionForm({
   )
   const [categoryId, setCategoryId] = useState(initialData?.category_id ?? '')
   const [personName, setPersonName] = useState(initialData?.person_name ?? '')
+  const [contactNumber, setContactNumber] = useState(initialData?.contact_number ?? '')
   const [paymentMethod, setPaymentMethod] = useState(initialData?.payment_method ?? 'upi')
   const [description, setDescription] = useState(initialData?.description ?? '')
   const [referenceNumber, setReferenceNumber] = useState(initialData?.reference_number ?? '')
@@ -65,6 +66,7 @@ export function TransactionForm({
     amount !== (initialData ? paiseToDecimalString(initialData.amountPaise) : '') ||
     categoryId !== (initialData?.category_id ?? '') ||
     personName !== (initialData?.person_name ?? '') ||
+    contactNumber !== (initialData?.contact_number ?? '') ||
     paymentMethod !== (initialData?.payment_method ?? 'upi') ||
     description !== (initialData?.description ?? '') ||
     referenceNumber !== (initialData?.reference_number ?? '')
@@ -119,6 +121,7 @@ export function TransactionForm({
         category_id: categoryId,
         payment_method: paymentMethod,
         person_name: personName.trim() || null,
+        contact_number: contactNumber.trim() || null,
         description: description.trim() || null,
         reference_number: referenceNumber.trim() || null,
       }
@@ -238,6 +241,24 @@ export function TransactionForm({
               value={personName}
               onChange={(e) => setPersonName(e.target.value)}
               maxLength={120}
+              className="h-10"
+            />
+          </FormField>
+
+          {/* Contact / Phone Number */}
+          <FormField
+            id="contact_number"
+            label={isIncome ? 'Contact Number (Phone / Mobile)' : 'Vendor / Payee Contact Number'}
+            error={fieldErrors.contact_number}
+            hint="Optional phone / mobile number"
+          >
+            <Input
+              id="contact_number"
+              type="tel"
+              placeholder="e.g. +91 98765 43210"
+              value={contactNumber}
+              onChange={(e) => setContactNumber(e.target.value)}
+              maxLength={30}
               className="h-10"
             />
           </FormField>
