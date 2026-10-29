@@ -7,10 +7,65 @@ function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('Ledger App')
     .addItem('Setup All Sheets', 'setupCompleteSheeting')
+    .addItem('Add Paid & Pending Columns', 'addPaidAndPendingColumns')
     .addItem('Add Contact Number Column', 'addContactNumberColumn')
     .addItem('Re-apply Formatting', 'setupCompleteSheeting')
     .addItem('Add Sample Transactions', 'addSampleTransactions')
     .addToUi();
+}
+
+/**
+ * 1-Click Function to insert Paid & Pending Columns
+ * Keeps all existing rows 100% safe!
+ */
+function addPaidAndPendingColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
+
+  var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  var colMap = {};
+  for (var c = 0; c < headers.length; c++) {
+    var key = String(headers[c] || '').toLowerCase().replace(/[^a-z]/g, '');
+    colMap[key] = c + 1; // 1-based index
+  }
+
+  if (!colMap['paid']) {
+    var amtCol = colMap['amount'] || 4;
+    // Insert 2 columns right after Amount
+    sheet.insertColumnsAfter(amtCol, 2);
+    sheet.getRange(1, amtCol + 1).setValue('Paid')
+      .setFontWeight('bold')
+      .setFontColor('#ffffff')
+      .setBackground('#1e293b')
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle');
+    sheet.getRange(1, amtCol + 2).setValue('Pending')
+      .setFontWeight('bold')
+      .setFontColor('#ffffff')
+      .setBackground('#1e293b')
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle');
+
+    sheet.setColumnWidth(amtCol + 1, 130);
+    sheet.setColumnWidth(amtCol + 2, 130);
+
+    // Populate existing rows: Paid = Amount, Pending = 0
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      var amounts = sheet.getRange(2, amtCol, lastRow - 1, 1).getValues();
+      var paidVals = [];
+      var pendingVals = [];
+      for (var r = 0; r < amounts.length; r++) {
+        var a = Number(amounts[r][0] || 0);
+        paidVals.push([a]);
+        pendingVals.push([0]);
+      }
+      sheet.getRange(2, amtCol + 1, lastRow - 1, 1).setValues(paidVals).setNumberFormat('#,##0.00');
+      sheet.getRange(2, amtCol + 2, lastRow - 1, 1).setValues(pendingVals).setNumberFormat('#,##0.00');
+    }
+  }
+
+  SpreadsheetApp.flush();
 }
 
 /**
@@ -422,27 +477,32 @@ function doPost(e) {
       var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
       if (!sheet) return jsonResponse({ ok: false, error: 'Transactions sheet not found' });
 
+      // Auto-migrate: Ensure Paid and Pending columns exist
       var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+      var hasPaid = false;
       var hasContact = false;
       for (var c = 0; c < headers.length; c++) {
-        if (String(headers[c] || '').toLowerCase().indexOf('contact') >= 0) {
-          hasContact = true;
-          break;
-        }
+        var hStr = String(headers[c] || '').toLowerCase();
+        if (hStr.indexOf('paid') >= 0) hasPaid = true;
+        if (hStr.indexOf('contact') >= 0) hasContact = true;
       }
 
-      // If ContactNumber column is not there yet, auto-insert it right now!
-      if (!hasContact && sheet.getLastColumn() >= 6) {
-        sheet.insertColumnAfter(6);
-        sheet.getRange(1, 7).setValue('ContactNumber')
-          .setFontWeight('bold')
-          .setFontColor('#ffffff')
-          .setBackground('#1e293b')
-          .setHorizontalAlignment('center')
-          .setVerticalAlignment('middle');
-        sheet.setColumnWidth(7, 150);
-        sheet.getRange('G2:G').setNumberFormat('@').setHorizontalAlignment('left');
-        hasContact = true;
+      if (!hasPaid) {
+        addPaidAndPendingColumns();
+        sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
+        headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+      }
+
+      if (!hasContact) {
+        addContactNumberColumn();
+        sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
+        headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+      }
+
+      var colMap = {};
+      for (var h = 0; h < headers.length; h++) {
+        var key = String(headers[h] || '').toLowerCase().replace(/[^a-z]/g, '');
+        colMap[key] = h;
       }
 
       var id = 'tx_' + new Date().getTime() + '_' + Math.floor(Math.random() * 1000);
@@ -450,21 +510,30 @@ function doPost(e) {
       if (contactVal && (contactVal.indexOf('+') === 0 || contactVal.indexOf('0') === 0)) {
         contactVal = "'" + contactVal;
       }
-      var row = [
-        id,
-        payload.date,
-        String(payload.type).toLowerCase(),
-        Number(payload.amount),
-        payload.category || 'Uncategorized',
-        payload.party || '',
-        contactVal,
-        payload.paymentMethod || 'Cash',
-        payload.referenceNumber || '',
-        payload.description || '',
-        new Date().toISOString()
-      ];
 
-      sheet.appendRow(row);
+      var amt = Number(payload.amount || 0);
+      var paidAmt = payload.paid !== undefined && payload.paid !== '' ? Number(payload.paid) : amt;
+      var pendingAmt = payload.pending !== undefined && payload.pending !== '' ? Number(payload.pending) : Math.max(0, amt - paidAmt);
+
+      var newRow = new Array(headers.length);
+      for (var k = 0; k < newRow.length; k++) newRow[k] = '';
+
+      if (colMap['id'] !== undefined) newRow[colMap['id']] = id;
+      if (colMap['date'] !== undefined) newRow[colMap['date']] = payload.date;
+      if (colMap['type'] !== undefined) newRow[colMap['type']] = String(payload.type).toLowerCase();
+      if (colMap['amount'] !== undefined) newRow[colMap['amount']] = amt;
+      if (colMap['paid'] !== undefined) newRow[colMap['paid']] = paidAmt;
+      if (colMap['pending'] !== undefined) newRow[colMap['pending']] = pendingAmt;
+      if (colMap['category'] !== undefined) newRow[colMap['category']] = payload.category || 'Uncategorized';
+      if (colMap['party'] !== undefined) newRow[colMap['party']] = payload.party || '';
+      if (colMap['contactnumber'] !== undefined) newRow[colMap['contactnumber']] = contactVal;
+      else if (colMap['contact'] !== undefined) newRow[colMap['contact']] = contactVal;
+      if (colMap['paymentmethod'] !== undefined) newRow[colMap['paymentmethod']] = payload.paymentMethod || 'Cash';
+      if (colMap['referencenumber'] !== undefined) newRow[colMap['referencenumber']] = payload.referenceNumber || '';
+      if (colMap['description'] !== undefined) newRow[colMap['description']] = payload.description || '';
+      if (colMap['createdat'] !== undefined) newRow[colMap['createdat']] = new Date().toISOString();
+
+      sheet.appendRow(newRow);
       return jsonResponse({ ok: true, id: id, message: 'Transaction recorded in Sheet' });
     }
 
@@ -486,6 +555,8 @@ function doPost(e) {
           if (payload.date && colMap['date']) sheet.getRange(rowNum, colMap['date']).setValue(payload.date);
           if (payload.type && colMap['type']) sheet.getRange(rowNum, colMap['type']).setValue(String(payload.type).toLowerCase());
           if (payload.amount !== undefined && colMap['amount']) sheet.getRange(rowNum, colMap['amount']).setValue(Number(payload.amount));
+          if (payload.paid !== undefined && colMap['paid']) sheet.getRange(rowNum, colMap['paid']).setValue(Number(payload.paid));
+          if (payload.pending !== undefined && colMap['pending']) sheet.getRange(rowNum, colMap['pending']).setValue(Number(payload.pending));
           if (payload.category && colMap['category']) sheet.getRange(rowNum, colMap['category']).setValue(payload.category);
           if (payload.party !== undefined && colMap['party']) sheet.getRange(rowNum, colMap['party']).setValue(payload.party);
           if (payload.contactNumber !== undefined && (colMap['contactnumber'] || colMap['contact'])) {
@@ -616,20 +687,28 @@ function getTransactionsData(ss) {
 
     var typeIdx = colMap['type'] !== undefined ? colMap['type'] : 2;
     var amtIdx = colMap['amount'] !== undefined ? colMap['amount'] : 3;
-    var catIdx = colMap['category'] !== undefined ? colMap['category'] : 4;
-    var partyIdx = colMap['party'] !== undefined ? colMap['party'] : 5;
+    var paidIdx = colMap['paid'] !== undefined ? colMap['paid'] : (colMap['paidamount'] !== undefined ? colMap['paidamount'] : -1);
+    var pendingIdx = colMap['pending'] !== undefined ? colMap['pending'] : (colMap['pendingamount'] !== undefined ? colMap['pendingamount'] : -1);
+    var catIdx = colMap['category'] !== undefined ? colMap['category'] : (paidIdx === -1 ? 4 : 6);
+    var partyIdx = colMap['party'] !== undefined ? colMap['party'] : (paidIdx === -1 ? 5 : 7);
     var contactIdx = colMap['contactnumber'] !== undefined ? colMap['contactnumber'] : (colMap['contact'] !== undefined ? colMap['contact'] : (colMap['phone'] !== undefined ? colMap['phone'] : -1));
     var methodIdx = colMap['paymentmethod'] !== undefined ? colMap['paymentmethod'] : (contactIdx === -1 ? 6 : 7);
     var refIdx = colMap['referencenumber'] !== undefined ? colMap['referencenumber'] : (contactIdx === -1 ? 7 : 8);
     var descIdx = colMap['description'] !== undefined ? colMap['description'] : (contactIdx === -1 ? 8 : 9);
     var createdIdx = colMap['createdat'] !== undefined ? colMap['createdat'] : (contactIdx === -1 ? 9 : 10);
 
+    var amtVal = Number(r[amtIdx] || 0);
+    var paidVal = paidIdx >= 0 && r[paidIdx] !== '' && r[paidIdx] !== null ? Number(r[paidIdx]) : amtVal;
+    var pendingVal = pendingIdx >= 0 && r[pendingIdx] !== '' && r[pendingIdx] !== null ? Number(r[pendingIdx]) : Math.max(0, amtVal - paidVal);
+
     transactions.push({
       id: id,
       transaction_date: dateStr,
       type: String(r[typeIdx] || 'expense').toLowerCase(),
-      amount: Number(r[amtIdx] || 0),
-      category_name: String(r[catIdx] || 'Uncategorized'),
+      amount: amtVal,
+      paid: paidVal,
+      pending: pendingVal,
+      category_name: catIdx >= 0 && r[catIdx] ? String(r[catIdx]) : 'Uncategorized',
       person_name: partyIdx >= 0 && r[partyIdx] ? String(r[partyIdx]) : null,
       contact_number: contactIdx >= 0 && r[contactIdx] ? String(r[contactIdx]).replace(/^'/, '').trim() : null,
       payment_method: methodIdx >= 0 && r[methodIdx] ? String(r[methodIdx]) : 'Cash',

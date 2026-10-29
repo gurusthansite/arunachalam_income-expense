@@ -89,6 +89,8 @@ export async function postGoogleSheetsAction(payload: any) {
               transaction_date: payload.date || t.transaction_date,
               type: payload.type ? String(payload.type).toLowerCase() : t.type,
               amount: payload.amount !== undefined ? Number(payload.amount) : t.amount,
+              paid: payload.paid !== undefined ? Number(payload.paid) : (payload.amount !== undefined ? Number(payload.amount) : t.paid),
+              pending: payload.pending !== undefined ? Number(payload.pending) : t.pending,
               category_name: payload.category || t.category_name,
               person_name: payload.party !== undefined ? (payload.party || null) : t.person_name,
               contact_number: payload.contactNumber !== undefined ? (payload.contactNumber || null) : t.contact_number,

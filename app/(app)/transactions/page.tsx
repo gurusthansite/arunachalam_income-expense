@@ -16,6 +16,7 @@ interface PageProps {
   searchParams: Promise<{
     q?: string
     type?: string
+    status?: string
     categoryId?: string
     sort?: string
     dir?: string
@@ -33,6 +34,8 @@ export default async function TransactionsPage({ searchParams }: PageProps) {
 
   const validTypes: TxType[] = ['income', 'expense']
   const type = validTypes.includes(params.type as TxType) ? (params.type as TxType) : undefined
+  const validStatuses = ['all', 'paid', 'partial', 'pending']
+  const status = validStatuses.includes(params.status || '') ? (params.status as any) : undefined
   const sort = params.sort === 'amount' ? 'amount' : 'date'
   const dir = params.dir === 'asc' ? 'asc' : 'desc'
 
@@ -41,6 +44,7 @@ export default async function TransactionsPage({ searchParams }: PageProps) {
     getTransactions({
       q: params.q,
       type,
+      status,
       categoryId: params.categoryId,
       from: params.from,
       to: params.to,
@@ -98,6 +102,7 @@ export default async function TransactionsPage({ searchParams }: PageProps) {
         currentFilters={{
           q: params.q ?? '',
           type: type ?? '',
+          status: status ?? '',
           categoryId: params.categoryId ?? '',
           sort,
           dir,

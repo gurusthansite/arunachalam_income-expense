@@ -48,12 +48,46 @@ export function TransactionForm({
   const [amount, setAmount] = useState(
     initialData ? paiseToDecimalString(initialData.amountPaise) : ''
   )
+  const [paidAmount, setPaidAmount] = useState(
+    initialData
+      ? paiseToDecimalString(initialData.paidPaise !== undefined ? initialData.paidPaise : initialData.amountPaise)
+      : ''
+  )
+  const [hasManuallyEditedPaid, setHasManuallyEditedPaid] = useState(Boolean(initialData))
   const [categoryId, setCategoryId] = useState(initialData?.category_id ?? '')
   const [personName, setPersonName] = useState(initialData?.person_name ?? '')
   const [contactNumber, setContactNumber] = useState(initialData?.contact_number ?? '')
   const [paymentMethod, setPaymentMethod] = useState(initialData?.payment_method ?? 'upi')
   const [description, setDescription] = useState(initialData?.description ?? '')
   const [referenceNumber, setReferenceNumber] = useState(initialData?.reference_number ?? '')
+
+  // Calculate pending amount in real-time
+  const totalNum = Number(amount) || 0
+  const effectivePaidStr = !isIncome ? (paidAmount === '' ? (hasManuallyEditedPaid ? '0' : amount) : paidAmount) : amount
+  const paidNum = Number(effectivePaidStr) || 0
+  const pendingNum = !isIncome ? Math.max(0, totalNum - paidNum) : 0
+
+  function handleAmountChange(val: string) {
+    setAmount(val)
+    if (!hasManuallyEditedPaid && !isIncome) {
+      setPaidAmount(val)
+    }
+  }
+
+  function handlePaidChange(val: string) {
+    setHasManuallyEditedPaid(true)
+    setPaidAmount(val)
+  }
+
+  function setFullyPaid() {
+    setHasManuallyEditedPaid(true)
+    setPaidAmount(amount || '0')
+  }
+
+  function setUnpaid() {
+    setHasManuallyEditedPaid(true)
+    setPaidAmount('0')
+  }
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -64,6 +98,7 @@ export function TransactionForm({
   const isDirty =
     date !== (initialData?.transaction_date ?? todayIso()) ||
     amount !== (initialData ? paiseToDecimalString(initialData.amountPaise) : '') ||
+    paidAmount !== (initialData ? paiseToDecimalString(initialData.paidPaise ?? initialData.amountPaise) : '') ||
     categoryId !== (initialData?.category_id ?? '') ||
     personName !== (initialData?.person_name ?? '') ||
     contactNumber !== (initialData?.contact_number ?? '') ||
@@ -100,8 +135,11 @@ export function TransactionForm({
     // Quick client validations
     const errors: Record<string, string> = {}
     if (!date) errors.transaction_date = 'Transaction date is required'
-    if (!amount || Number(amount) <= 0 || isNaN(Number(amount))) {
-      errors.amount = 'Enter a valid positive amount'
+    if (!amount || isNaN(Number(amount))) {
+      errors.amount = 'Enter a valid amount'
+    }
+    if (!isIncome && paidAmount !== '' && isNaN(Number(paidAmount))) {
+      errors.paid_amount = 'Enter a valid paid amount'
     }
     if (!categoryId) errors.category_id = 'Please select a category'
     if (!paymentMethod) errors.payment_method = 'Please select a payment method'
@@ -118,6 +156,8 @@ export function TransactionForm({
         type,
         transaction_date: date,
         amount,
+        paid_amount: !isIncome ? (paidAmount === '' ? amount : paidAmount) : amount,
+        pending_amount: !isIncome ? String(pendingNum) : '0',
         category_id: categoryId,
         payment_method: paymentMethod,
         person_name: personName.trim() || null,
@@ -173,7 +213,7 @@ export function TransactionForm({
           {/* Transaction Date */}
           <FormField
             id="transaction_date"
-            label="Transaction Date"
+            label="Date"
             required
             error={fieldErrors.transaction_date}
           >
@@ -187,13 +227,13 @@ export function TransactionForm({
             />
           </FormField>
 
-          {/* Amount in INR */}
+          {/* Total Amount / Total Expense */}
           <FormField
             id="amount"
-            label="Amount (in INR ₹)"
+            label={isIncome ? 'Income Amount (₹)' : 'Total Expense (₹)'}
             required
             error={fieldErrors.amount}
-            hint="Enter amount (positive, zero, or negative e.g. -500)"
+            hint={isIncome ? 'Enter total income received' : 'Enter the full bill or incurred expense amount'}
           >
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-muted-foreground font-medium">₹</span>
@@ -203,12 +243,87 @@ export function TransactionForm({
                 inputMode="decimal"
                 placeholder="0.00"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="h-10 pl-8 font-mono text-base"
+                onChange={(e) => handleAmountChange(e.target.value)}
+                className="h-10 pl-8 font-mono text-base font-medium"
                 required
               />
             </div>
           </FormField>
+
+          {/* Paid & Pending Section for Expenses */}
+          {!isIncome && (
+            <>
+              {/* Paid Amount */}
+              <FormField
+                id="paid_amount"
+                label="Paid (₹)"
+                required
+                error={fieldErrors.paid_amount}
+                hint={
+                  <span className="flex items-center gap-1.5 pt-1">
+                    <span>Quick:</span>
+                    <button
+                      type="button"
+                      onClick={setFullyPaid}
+                      className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground hover:bg-muted/80 cursor-pointer border"
+                    >
+                      Fully Paid
+                    </button>
+                    <button
+                      type="button"
+                      onClick={setUnpaid}
+                      className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-rose-600 hover:bg-muted/80 cursor-pointer border"
+                    >
+                      Unpaid / ₹0
+                    </button>
+                  </span>
+                }
+              >
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-muted-foreground font-medium">₹</span>
+                  <Input
+                    id="paid_amount"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={paidAmount}
+                    onChange={(e) => handlePaidChange(e.target.value)}
+                    className="h-10 pl-8 font-mono text-base font-medium"
+                  />
+                </div>
+              </FormField>
+
+              {/* Pending Amount (Live Calculated) */}
+              <div className="rounded-lg border bg-muted/40 p-3.5 flex flex-col justify-between space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Pending
+                  </span>
+                  {pendingNum <= 0 && totalNum > 0 ? (
+                    <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-950/50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+                      Fully Paid
+                    </span>
+                  ) : paidNum > 0 && pendingNum > 0 ? (
+                    <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-950/50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                      Partially Paid
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-rose-100 dark:bg-rose-950/50 px-2 py-0.5 text-[11px] font-semibold text-rose-800 dark:text-rose-300">
+                      Unpaid / Due
+                    </span>
+                  )}
+                </div>
+                <div className="text-xl font-bold font-mono text-foreground">
+                  ₹{pendingNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {paidNum > 0
+                    ? `₹${paidNum.toFixed(2)} paid now; balance deducts ₹${paidNum.toFixed(2)}.`
+                    : '₹0 paid now; cash balance will not be deducted until paid.'}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Category */}
           <FormField

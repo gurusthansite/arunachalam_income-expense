@@ -30,6 +30,15 @@ export async function createTransaction(input: TransactionInput): Promise<Action
   const catCheck = await validateCategory(values.category_id, values.type, false)
   if (catCheck.error) return { ok: false, error: catCheck.error, fieldErrors: { category_id: catCheck.error } }
 
+  const paidVal =
+    values.paid_amount !== undefined && values.paid_amount !== null && values.paid_amount !== ''
+      ? values.paid_amount
+      : values.amount
+  const pendingVal =
+    values.pending_amount !== undefined && values.pending_amount !== null && values.pending_amount !== ''
+      ? values.pending_amount
+      : String(Math.max(0, Number(values.amount) - Number(paidVal)))
+
   try {
     // 1. Save to Google Sheets if connected
     if (getGoogleSheetsScriptUrl()) {
@@ -38,6 +47,8 @@ export async function createTransaction(input: TransactionInput): Promise<Action
         date: values.transaction_date,
         type: values.type,
         amount: values.amount,
+        paid: paidVal,
+        pending: pendingVal,
         category: catCheck.name,
         party: values.person_name || '',
         contactNumber: values.contact_number || '',
@@ -56,6 +67,8 @@ export async function createTransaction(input: TransactionInput): Promise<Action
         type: values.type,
         transaction_date: values.transaction_date,
         amount: values.amount,
+        paid_amount: paidVal,
+        pending_amount: pendingVal,
         category_id: values.category_id,
         payment_method: values.payment_method,
         person_name: values.person_name,
@@ -87,6 +100,15 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
   const catCheck = await validateCategory(values.category_id, values.type, true)
   if (catCheck.error) return { ok: false, error: catCheck.error, fieldErrors: { category_id: catCheck.error } }
 
+  const paidVal =
+    values.paid_amount !== undefined && values.paid_amount !== null && values.paid_amount !== ''
+      ? values.paid_amount
+      : values.amount
+  const pendingVal =
+    values.pending_amount !== undefined && values.pending_amount !== null && values.pending_amount !== ''
+      ? values.pending_amount
+      : String(Math.max(0, Number(values.amount) - Number(paidVal)))
+
   try {
     if (getGoogleSheetsScriptUrl()) {
       const gRes = await postGoogleSheetsAction({
@@ -95,6 +117,8 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
         date: values.transaction_date,
         type: values.type,
         amount: values.amount,
+        paid: paidVal,
+        pending: pendingVal,
         category: catCheck.name,
         party: values.person_name || '',
         contactNumber: values.contact_number || '',
@@ -112,6 +136,8 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
         type: values.type,
         transaction_date: values.transaction_date,
         amount: values.amount,
+        paid_amount: paidVal,
+        pending_amount: pendingVal,
         category_id: values.category_id,
         payment_method: values.payment_method,
         person_name: values.person_name,

@@ -49,7 +49,15 @@ import { TransactionForm } from '@/components/transactions/transaction-form'
 import { deleteTransaction } from '@/app/actions/transactions'
 import { formatDate } from '@/lib/dates'
 import { formatINR } from '@/lib/money'
-import { paymentMethodLabel, type Category, type Transaction, type TxType } from '@/lib/types'
+import {
+  paymentMethodLabel,
+  getTxPaidPaise,
+  getTxPendingPaise,
+  getTxPaymentStatus,
+  type Category,
+  type Transaction,
+  type TxType,
+} from '@/lib/types'
 
 interface TransactionsTableProps {
   transactions: Transaction[]
@@ -60,6 +68,7 @@ interface TransactionsTableProps {
   currentFilters: {
     q: string
     type: string
+    status?: string
     categoryId: string
     sort: 'date' | 'amount'
     dir: 'asc' | 'desc'
@@ -127,6 +136,7 @@ export function TransactionsTable({
   const hasActiveFilters = Boolean(
     currentFilters.q ||
     currentFilters.type ||
+    currentFilters.status ||
     currentFilters.categoryId ||
     currentFilters.range ||
     currentFilters.from ||
@@ -171,6 +181,19 @@ export function TransactionsTable({
               <option value="">All Types (Income & Expense)</option>
               <option value="income">Income Only</option>
               <option value="expense">Expense Only</option>
+            </select>
+
+            {/* Payment Status Filter */}
+            <select
+              aria-label="Filter by payment status"
+              value={currentFilters.status || ''}
+              onChange={(e) => updateQuery({ status: e.target.value || null })}
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-xs font-medium shadow-2xs outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+            >
+              <option value="">All Payment Statuses</option>
+              <option value="paid">Fully Paid</option>
+              <option value="pending">Pending / Due</option>
+              <option value="partial">Partially Paid</option>
             </select>
 
             {/* Category Filter */}
@@ -278,20 +301,24 @@ export function TransactionsTable({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[110px]">Date</TableHead>
-                  <TableHead className="w-[100px]">Type</TableHead>
+                  <TableHead className="w-[105px]">Date</TableHead>
+                  <TableHead className="w-[95px]">Type</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Party / Payee</TableHead>
-                  <TableHead className="w-[150px]">Contact Number</TableHead>
-                  <TableHead>Description & Ref</TableHead>
+                  <TableHead className="w-[140px]">Contact Number</TableHead>
                   <TableHead>Method</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="w-[90px] text-center">Actions</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Total Expense / Income</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Paid</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Pending</TableHead>
+                  <TableHead className="w-[85px] text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {transactions.map((tx) => {
                   const isIncome = tx.type === 'income'
+                  const paidPaise = getTxPaidPaise(tx)
+                  const pendingPaise = getTxPendingPaise(tx)
+                  const isFullyPaid = pendingPaise <= 0
                   return (
                     <TableRow key={tx.id}>
                       <TableCell className="font-medium text-xs whitespace-nowrap">
@@ -317,8 +344,18 @@ export function TransactionsTable({
                       <TableCell className="text-xs font-medium">
                         {tx.category_name}
                       </TableCell>
-                      <TableCell className="text-xs font-medium text-foreground">
-                        {tx.person_name || '—'}
+                      <TableCell className="text-xs">
+                        <div className="font-medium text-foreground">{tx.person_name || '—'}</div>
+                        {tx.description && (
+                          <div className="text-[11px] text-muted-foreground truncate max-w-[160px]" title={tx.description}>
+                            {tx.description}
+                          </div>
+                        )}
+                        {tx.reference_number && (
+                          <div className="text-[10px] font-mono text-muted-foreground/75">
+                            Ref: {tx.reference_number}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs font-mono whitespace-nowrap">
                         {tx.contact_number ? (
@@ -330,33 +367,61 @@ export function TransactionsTable({
                           <span className="text-muted-foreground/60">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                        {tx.description ? (
-                          <span>{tx.description}</span>
-                        ) : null}
-                        {tx.reference_number ? (
-                          <span className="block text-[11px] font-mono text-muted-foreground/80">
-                            Ref: {tx.reference_number}
-                          </span>
-                        ) : !tx.description ? '—' : null}
-                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {paymentMethodLabel(tx.payment_method)}
                       </TableCell>
+
+                      {/* Total Amount / Total Expense */}
                       <TableCell
                         className={`text-right font-mono text-xs font-semibold whitespace-nowrap ${
-                          (tx.type === 'income' ? tx.amountPaise >= 0 : tx.amountPaise < 0)
+                          (isIncome ? tx.amountPaise >= 0 : tx.amountPaise < 0)
                             ? 'text-emerald-700 dark:text-emerald-400'
                             : 'text-rose-700 dark:text-rose-400'
                         }`}
                       >
                         {(() => {
-                          const isIncome = tx.type === 'income'
                           const isNegative = tx.amountPaise < 0
                           const sign = isIncome ? (isNegative ? '-' : '+') : (isNegative ? '+' : '-')
                           return `${sign}${formatINR(Math.abs(tx.amountPaise))}`
                         })()}
                       </TableCell>
+
+                      {/* Paid */}
+                      <TableCell className="text-right font-mono text-xs font-medium whitespace-nowrap text-foreground">
+                        {(() => {
+                          if (isIncome) return `+${formatINR(paidPaise)}`
+                          if (paidPaise === 0) return <span className="text-muted-foreground/60">₹0.00</span>
+                          return `-${formatINR(paidPaise)}`
+                        })()}
+                      </TableCell>
+
+                      {/* Pending */}
+                      <TableCell className="text-right font-mono text-xs whitespace-nowrap">
+                        {(() => {
+                          if (isIncome) return <span className="text-muted-foreground/40">—</span>
+                          if (isFullyPaid) {
+                            return (
+                              <span className="inline-flex items-center text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                                ₹0.00
+                              </span>
+                            )
+                          }
+                          return (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'text-[11px] font-mono px-1.5 py-0',
+                                paidPaise <= 0
+                                  ? 'border-rose-400/40 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-400'
+                                  : 'border-amber-400/40 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-400'
+                              )}
+                            >
+                              ₹{formatINR(pendingPaise)} {paidPaise <= 0 ? 'Due' : 'Pending'}
+                            </Badge>
+                          )
+                        })()}
+                      </TableCell>
+
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
                           <Button

@@ -15,6 +15,7 @@ import type {
   Transaction,
   TxType,
 } from '@/lib/types'
+import { getTxPaidPaise, getTxPendingPaise, getTxPaymentStatus } from '@/lib/types'
 
 export type AuditEntry = {
   id: number
@@ -222,22 +223,40 @@ function readTransactionsFromWb(wb: ExcelJS.Workbook): Transaction[] {
   const sheet = wb.getWorksheet('Transactions')
   const transactions: Transaction[] = []
   if (sheet) {
-    let hasContactCol = false
     const headerRow = sheet.getRow(1)
+    const colMap = new Map<string, number>()
     if (headerRow) {
-      headerRow.eachCell((cell) => {
-        if (cellValueToString(cell.value).toLowerCase().includes('contact')) {
-          hasContactCol = true
-        }
+      headerRow.eachCell((cell, colNumber) => {
+        const key = cellValueToString(cell.value).toLowerCase().replace(/[^a-z]/g, '')
+        colMap.set(key, colNumber)
       })
     }
 
+    const hasContactCol = colMap.has('contactnumber') || colMap.has('contact') || colMap.has('phone')
+    const contactCol = colMap.get('contactnumber') ?? colMap.get('contact') ?? colMap.get('phone')
+    const paidCol = colMap.get('paid') ?? colMap.get('paidamount')
+    const pendingCol = colMap.get('pending') ?? colMap.get('pendingamount')
+
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return
-      const id = cellValueToString(row.getCell(1).value)
-      const transaction_date = cellValueToString(row.getCell(2).value)
-      const type = cellValueToString(row.getCell(3).value).toLowerCase() as TxType
-      const amountPaise = toPaise(row.getCell(4).value as any)
+      const id = cellValueToString(row.getCell(colMap.get('id') ?? 1).value)
+      const transaction_date = cellValueToString(row.getCell(colMap.get('date') ?? 2).value)
+      const type = (cellValueToString(row.getCell(colMap.get('type') ?? 3).value).toLowerCase() || 'expense') as TxType
+      const amountPaise = toPaise(row.getCell(colMap.get('amount') ?? 4).value as any)
+
+      let paidPaise: number
+      if (paidCol && row.getCell(paidCol).value !== null && row.getCell(paidCol).value !== undefined && cellValueToString(row.getCell(paidCol).value).trim() !== '') {
+        paidPaise = toPaise(row.getCell(paidCol).value as any)
+      } else {
+        paidPaise = amountPaise
+      }
+
+      let pendingPaise: number
+      if (pendingCol && row.getCell(pendingCol).value !== null && row.getCell(pendingCol).value !== undefined && cellValueToString(row.getCell(pendingCol).value).trim() !== '') {
+        pendingPaise = toPaise(row.getCell(pendingCol).value as any)
+      } else {
+        pendingPaise = type === 'expense' ? Math.max(0, amountPaise - paidPaise) : 0
+      }
 
       if (id && transaction_date) {
         transactions.push({
@@ -245,13 +264,15 @@ function readTransactionsFromWb(wb: ExcelJS.Workbook): Transaction[] {
           transaction_date,
           type,
           amountPaise,
-          category_id: cellValueToString(row.getCell(5).value),
-          category_name: cellValueToString(row.getCell(6).value) || 'Uncategorized',
-          person_name: cellValueToString(row.getCell(7).value) || null,
-          contact_number: hasContactCol ? cellValueToString(row.getCell(8).value) || null : null,
-          payment_method: cellValueToString(row.getCell(hasContactCol ? 9 : 8).value) || 'other',
-          reference_number: cellValueToString(row.getCell(hasContactCol ? 10 : 9).value) || null,
-          description: cellValueToString(row.getCell(hasContactCol ? 11 : 10).value) || null,
+          paidPaise,
+          pendingPaise,
+          category_id: cellValueToString(row.getCell(colMap.get('categoryid') ?? 5).value),
+          category_name: cellValueToString(row.getCell(colMap.get('categoryname') ?? colMap.get('category') ?? 6).value) || 'Uncategorized',
+          person_name: cellValueToString(row.getCell(colMap.get('personname') ?? colMap.get('party') ?? 7).value) || null,
+          contact_number: contactCol ? cellValueToString(row.getCell(contactCol).value) || null : null,
+          payment_method: cellValueToString(row.getCell(colMap.get('paymentmethod') ?? (hasContactCol ? 9 : 8)).value) || 'other',
+          reference_number: cellValueToString(row.getCell(colMap.get('referencenumber') ?? (hasContactCol ? 10 : 9)).value) || null,
+          description: cellValueToString(row.getCell(colMap.get('description') ?? (hasContactCol ? 11 : 10)).value) || null,
         })
       }
     })
@@ -292,6 +313,7 @@ export async function getCategoriesWithUsage(): Promise<CategoryWithUsage[]> {
 export type TransactionFilters = {
   q?: string
   type?: TxType
+  status?: 'all' | 'paid' | 'partial' | 'pending'
   categoryId?: string
   from?: string | null
   to?: string | null
@@ -309,6 +331,9 @@ export async function getTransactions(filters: TransactionFilters) {
   if (filters.type) {
     all = all.filter((t) => t.type === filters.type)
   }
+  if (filters.status && filters.status !== 'all') {
+    all = all.filter((t) => getTxPaymentStatus(t) === filters.status)
+  }
   if (filters.categoryId) {
     all = all.filter((t) => t.category_id === filters.categoryId)
   }
@@ -325,6 +350,7 @@ export async function getTransactions(filters: TransactionFilters) {
         t.category_name.toLowerCase().includes(q) ||
         (t.description && t.description.toLowerCase().includes(q)) ||
         (t.person_name && t.person_name.toLowerCase().includes(q)) ||
+        (t.contact_number && t.contact_number.toLowerCase().includes(q)) ||
         (t.reference_number && t.reference_number.toLowerCase().includes(q))
       )
     })
@@ -362,21 +388,32 @@ export async function getSummary(from: string | null, to: string | null): Promis
 
   let priorNet = 0
   let income = 0
-  let expense = 0
+  let paidExpense = 0
+  let totalExpense = 0
+  let pendingExpense = 0
   let count = 0
 
   for (const t of all) {
+    const isIncome = t.type === 'income'
+    const paid = getTxPaidPaise(t)
+    const pending = getTxPendingPaise(t)
+
     if (from && t.transaction_date < from) {
-      if (t.type === 'income') priorNet += t.amountPaise
-      else priorNet -= t.amountPaise
+      if (isIncome) priorNet += paid
+      else priorNet -= paid
     }
 
     const afterOrEqualFrom = !from || t.transaction_date >= from
     const beforeOrEqualTo = !to || t.transaction_date <= to
 
     if (afterOrEqualFrom && beforeOrEqualTo) {
-      if (t.type === 'income') income += t.amountPaise
-      else expense += t.amountPaise
+      if (isIncome) {
+        income += t.amountPaise
+      } else {
+        totalExpense += t.amountPaise
+        paidExpense += paid
+        pendingExpense += pending
+      }
       count++
     }
   }
@@ -388,8 +425,10 @@ export async function getSummary(from: string | null, to: string | null): Promis
     orgOpeningPaise: orgOpening,
     periodOpeningPaise: periodOpening,
     incomePaise: income,
-    expensePaise: expense,
-    closingPaise: periodOpening + income - expense,
+    expensePaise: paidExpense, // Actual cash outflow
+    totalExpensePaise: totalExpense, // Total incurred bill amount
+    pendingExpensePaise: pendingExpense, // Total unpaid/due amount
+    closingPaise: periodOpening + income - paidExpense,
     transactionCount: count,
   }
 }
@@ -418,7 +457,7 @@ export async function getPeriodTotals(
 
     const rec = map.get(period)!
     if (t.type === 'income') rec.incomePaise += t.amountPaise
-    else rec.expensePaise += t.amountPaise
+    else rec.expensePaise += getTxPaidPaise(t)
   }
 
   const result: PeriodTotal[] = []
@@ -723,6 +762,8 @@ export async function createTransaction(input: {
   type: TxType
   transaction_date: string
   amount: string
+  paid_amount?: string | null
+  pending_amount?: string | null
   category_id: string
   payment_method: string
   person_name?: string | null
@@ -749,19 +790,44 @@ export async function createTransaction(input: {
     const id = generateId()
     const amountNum = Number(input.amount)
     const amountPaise = toPaise(input.amount)
+    const paidNum =
+      input.paid_amount !== undefined && input.paid_amount !== null && input.paid_amount !== ''
+        ? Number(input.paid_amount)
+        : amountNum
+    const paidPaise = toPaise(paidNum)
+    const pendingNum = Math.max(0, amountNum - paidNum)
+    const pendingPaise = Math.max(0, amountPaise - paidPaise)
 
-    // Check if header row contains ContactNumber
+    // Check if header row contains ContactNumber and Paid/Pending
     let hasContactCol = false
+    let hasPaidCol = false
     const headerRow = txSheet.getRow(1)
     if (headerRow) {
       headerRow.eachCell((cell) => {
-        if (cellValueToString(cell.value).toLowerCase().includes('contact')) {
-          hasContactCol = true
-        }
+        const val = cellValueToString(cell.value).toLowerCase()
+        if (val.includes('contact')) hasContactCol = true
+        if (val.includes('paid')) hasPaidCol = true
       })
     }
 
-    if (hasContactCol) {
+    if (hasPaidCol) {
+      txSheet.addRow([
+        id,
+        input.transaction_date,
+        input.type,
+        amountNum,
+        paidNum,
+        pendingNum,
+        input.category_id,
+        categoryName,
+        input.person_name || '',
+        input.contact_number || '',
+        input.payment_method,
+        input.reference_number || '',
+        input.description || '',
+        new Date().toISOString(),
+      ])
+    } else if (hasContactCol) {
       txSheet.addRow([
         id,
         input.transaction_date,
@@ -777,7 +843,6 @@ export async function createTransaction(input: {
         new Date().toISOString(),
       ])
     } else {
-      // Auto-migrate local sheet header if missing
       headerRow.getCell(8).value = 'ContactNumber'
       headerRow.getCell(9).value = 'PaymentMethod'
       headerRow.getCell(10).value = 'ReferenceNumber'
@@ -803,7 +868,7 @@ export async function createTransaction(input: {
       wb,
       'INSERT',
       'transactions',
-      `Recorded ${input.type} of ₹${input.amount} for ${categoryName}`
+      `Recorded ${input.type} of ₹${input.amount} (Paid: ₹${paidNum}, Pending: ₹${pendingNum}) for ${categoryName}`
     )
     await saveWorkbook(wb)
 
@@ -812,9 +877,12 @@ export async function createTransaction(input: {
       transaction_date: input.transaction_date,
       type: input.type,
       amountPaise,
+      paidPaise,
+      pendingPaise,
       category_id: input.category_id,
       category_name: categoryName,
       person_name: input.person_name || null,
+      contact_number: input.contact_number || null,
       payment_method: input.payment_method,
       reference_number: input.reference_number || null,
       description: input.description || null,
@@ -828,6 +896,8 @@ export async function updateTransaction(
     type: TxType
     transaction_date: string
     amount: string
+    paid_amount?: string | null
+    pending_amount?: string | null
     category_id: string
     payment_method: string
     person_name?: string | null
@@ -864,40 +934,42 @@ export async function updateTransaction(
 
     const amountNum = Number(input.amount)
     const amountPaise = toPaise(input.amount)
+    const paidNum =
+      input.paid_amount !== undefined && input.paid_amount !== null && input.paid_amount !== ''
+        ? Number(input.paid_amount)
+        : amountNum
+    const paidPaise = toPaise(paidNum)
+    const pendingNum = Math.max(0, amountNum - paidNum)
+    const pendingPaise = Math.max(0, amountPaise - paidPaise)
 
-    let hasContactCol = false
     const headerRow = txSheet.getRow(1)
+    const colMap = new Map<string, number>()
     if (headerRow) {
-      headerRow.eachCell((cell) => {
-        if (cellValueToString(cell.value).toLowerCase().includes('contact')) {
-          hasContactCol = true
-        }
+      headerRow.eachCell((cell, colNumber) => {
+        const key = cellValueToString(cell.value).toLowerCase().replace(/[^a-z]/g, '')
+        colMap.set(key, colNumber)
       })
     }
 
     const row = foundRow as ExcelJS.Row
-    row.getCell(2).value = input.transaction_date
-    row.getCell(3).value = input.type
-    row.getCell(4).value = amountNum
-    row.getCell(5).value = input.category_id
-    row.getCell(6).value = categoryName
-    row.getCell(7).value = input.person_name || ''
-    if (hasContactCol) {
-      row.getCell(8).value = input.contact_number || ''
-      row.getCell(9).value = input.payment_method
-      row.getCell(10).value = input.reference_number || ''
-      row.getCell(11).value = input.description || ''
-    } else {
-      row.getCell(8).value = input.payment_method
-      row.getCell(9).value = input.reference_number || ''
-      row.getCell(10).value = input.description || ''
-    }
+    if (colMap.has('date')) row.getCell(colMap.get('date')!).value = input.transaction_date
+    if (colMap.has('type')) row.getCell(colMap.get('type')!).value = input.type
+    if (colMap.has('amount')) row.getCell(colMap.get('amount')!).value = amountNum
+    if (colMap.has('paid')) row.getCell(colMap.get('paid')!).value = paidNum
+    if (colMap.has('pending')) row.getCell(colMap.get('pending')!).value = pendingNum
+    if (colMap.has('categoryid')) row.getCell(colMap.get('categoryid')!).value = input.category_id
+    if (colMap.has('categoryname')) row.getCell(colMap.get('categoryname')!).value = categoryName
+    if (colMap.has('personname')) row.getCell(colMap.get('personname')!).value = input.person_name || ''
+    if (colMap.has('contactnumber')) row.getCell(colMap.get('contactnumber')!).value = input.contact_number || ''
+    if (colMap.has('paymentmethod')) row.getCell(colMap.get('paymentmethod')!).value = input.payment_method
+    if (colMap.has('referencenumber')) row.getCell(colMap.get('referencenumber')!).value = input.reference_number || ''
+    if (colMap.has('description')) row.getCell(colMap.get('description')!).value = input.description || ''
 
     addAuditEntry(
       wb,
       'UPDATE',
       'transactions',
-      `Updated ${input.type} of ₹${input.amount} (${categoryName})`
+      `Updated ${input.type} of ₹${input.amount} (Paid: ₹${paidNum}, Pending: ₹${pendingNum}) (${categoryName})`
     )
     await saveWorkbook(wb)
 
@@ -906,9 +978,12 @@ export async function updateTransaction(
       transaction_date: input.transaction_date,
       type: input.type,
       amountPaise,
+      paidPaise,
+      pendingPaise,
       category_id: input.category_id,
       category_name: categoryName,
       person_name: input.person_name || null,
+      contact_number: input.contact_number || null,
       payment_method: input.payment_method,
       reference_number: input.reference_number || null,
       description: input.description || null,

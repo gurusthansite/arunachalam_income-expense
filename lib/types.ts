@@ -28,7 +28,9 @@ export type Transaction = {
   id: string
   transaction_date: string
   type: TxType
-  amountPaise: number
+  amountPaise: number // Total amount (Paise)
+  paidPaise?: number // Paid amount (Paise)
+  pendingPaise?: number // Pending amount (Paise)
   category_id: string
   category_name: string
   person_name: string | null
@@ -36,6 +38,30 @@ export type Transaction = {
   payment_method: string
   description: string | null
   reference_number: string | null
+}
+
+export function getTxPaidPaise(tx: Transaction): number {
+  if (typeof tx.paidPaise === 'number' && !isNaN(tx.paidPaise)) {
+    return tx.paidPaise
+  }
+  return tx.amountPaise
+}
+
+export function getTxPendingPaise(tx: Transaction): number {
+  if (typeof tx.pendingPaise === 'number' && !isNaN(tx.pendingPaise)) {
+    return tx.pendingPaise
+  }
+  const paid = getTxPaidPaise(tx)
+  return Math.max(0, tx.amountPaise - paid)
+}
+
+export function getTxPaymentStatus(tx: Transaction): 'paid' | 'partial' | 'pending' {
+  if (tx.type === 'income') return 'paid'
+  const paid = getTxPaidPaise(tx)
+  const total = tx.amountPaise
+  if (paid <= 0 && total > 0) return 'pending'
+  if (paid < total) return 'partial'
+  return 'paid'
 }
 
 export type OrgSettings = {
@@ -50,7 +76,9 @@ export type FinancialSummary = {
   orgOpeningPaise: number
   periodOpeningPaise: number
   incomePaise: number
-  expensePaise: number
+  expensePaise: number // Actual cash outflow (paid)
+  totalExpensePaise?: number // Total incurred expense amount
+  pendingExpensePaise?: number // Total pending payables
   closingPaise: number
   transactionCount: number
 }

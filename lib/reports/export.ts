@@ -3,7 +3,15 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { formatINRAscii, formatINRWhole, paiseToDecimalString, paiseToNumber, type Paise } from '@/lib/money'
 import { formatDate } from '@/lib/dates'
-import { paymentMethodLabel, type CategoryTotal, type FinancialSummary, type PersonTotal, type Transaction } from '@/lib/types'
+import {
+  paymentMethodLabel,
+  getTxPaidPaise,
+  getTxPendingPaise,
+  type CategoryTotal,
+  type FinancialSummary,
+  type PersonTotal,
+  type Transaction,
+} from '@/lib/types'
 
 interface ExportData {
   orgName: string
@@ -56,18 +64,21 @@ export function exportToCSV({
     'Payment Method',
     'Reference #',
     'Description',
-    'Income (INR)',
-    'Expense (INR)',
+    'Total Amount (INR)',
+    'Paid (INR)',
+    'Pending (INR)',
     'Running Balance (INR)',
   ].map(escapeCell).join(','))
 
   let runningBalance = summary.periodOpeningPaise
   transactions.forEach((tx) => {
     const isIncome = tx.type === 'income'
+    const paidPaise = getTxPaidPaise(tx)
+    const pendingPaise = getTxPendingPaise(tx)
     if (isIncome) {
       runningBalance += tx.amountPaise
     } else {
-      runningBalance -= tx.amountPaise
+      runningBalance -= paidPaise
     }
 
     lines.push([
@@ -79,8 +90,9 @@ export function exportToCSV({
       paymentMethodLabel(tx.payment_method),
       tx.reference_number || '',
       tx.description || '',
-      isIncome ? paiseToDecimalString(tx.amountPaise) : '',
-      !isIncome ? paiseToDecimalString(tx.amountPaise) : '',
+      paiseToDecimalString(tx.amountPaise),
+      paiseToDecimalString(paidPaise),
+      isIncome ? '0.00' : paiseToDecimalString(pendingPaise),
       paiseToDecimalString(runningBalance),
     ].map(escapeCell).join(','))
   })
@@ -149,16 +161,19 @@ export async function exportToExcel({
     { header: 'Method', key: 'method', width: 15 },
     { header: 'Reference #', key: 'ref', width: 18 },
     { header: 'Description', key: 'desc', width: 30 },
-    { header: 'Income', key: 'income', width: 16 },
-    { header: 'Expense', key: 'expense', width: 16 },
+    { header: 'Total (INR)', key: 'total', width: 16 },
+    { header: 'Paid (INR)', key: 'paid', width: 16 },
+    { header: 'Pending (INR)', key: 'pending', width: 16 },
     { header: 'Balance', key: 'balance', width: 18 },
   ]
 
   let runningBalance = summary.periodOpeningPaise
   transactions.forEach((tx) => {
     const isIncome = tx.type === 'income'
+    const paidPaise = getTxPaidPaise(tx)
+    const pendingPaise = getTxPendingPaise(tx)
     if (isIncome) runningBalance += tx.amountPaise
-    else runningBalance -= tx.amountPaise
+    else runningBalance -= paidPaise
 
     statementSheet.addRow({
       date: tx.transaction_date,
@@ -169,8 +184,9 @@ export async function exportToExcel({
       method: paymentMethodLabel(tx.payment_method),
       ref: tx.reference_number || '',
       desc: tx.description || '',
-      income: isIncome ? paiseToNumber(tx.amountPaise) : null,
-      expense: !isIncome ? paiseToNumber(tx.amountPaise) : null,
+      total: paiseToNumber(tx.amountPaise),
+      paid: paiseToNumber(paidPaise),
+      pending: isIncome ? 0 : paiseToNumber(pendingPaise),
       balance: paiseToNumber(runningBalance),
     })
   })
@@ -259,8 +275,10 @@ export function exportToPDF({
   let runningBalance = summary.periodOpeningPaise
   transactions.slice(0, 500).forEach((tx) => {
     const isIncome = tx.type === 'income'
+    const paidPaise = getTxPaidPaise(tx)
+    const pendingPaise = getTxPendingPaise(tx)
     if (isIncome) runningBalance += tx.amountPaise
-    else runningBalance -= tx.amountPaise
+    else runningBalance -= paidPaise
 
     const partyDisplay = tx.person_name
       ? tx.contact_number
@@ -274,7 +292,8 @@ export function exportToPDF({
       tx.category_name,
       partyDisplay,
       isIncome ? formatINRAscii(tx.amountPaise) : '—',
-      !isIncome ? formatINRAscii(tx.amountPaise) : '—',
+      !isIncome ? formatINRAscii(paidPaise) : '—',
+      !isIncome && pendingPaise > 0 ? formatINRAscii(pendingPaise) : '—',
       formatINRAscii(runningBalance),
     ])
   })
@@ -288,14 +307,15 @@ export function exportToPDF({
     startY: afterCatY + 6,
     margin: { left: 40, right: 40 },
     theme: 'striped',
-    head: [['Date', 'Type', 'Category', 'Party / Payee', 'Income', 'Expense', 'Balance']],
+    head: [['Date', 'Type', 'Category', 'Party / Payee', 'Income', 'Paid Expense', 'Pending', 'Balance']],
     body: txRows,
     headStyles: { fillColor: [240, 240, 245], textColor: [40, 40, 40], fontStyle: 'bold' },
     styles: { fontSize: 8 },
     columnStyles: {
       4: { halign: 'right', textColor: [16, 120, 60] },
       5: { halign: 'right', textColor: [180, 40, 40] },
-      6: { halign: 'right', fontStyle: 'bold' },
+      6: { halign: 'right', textColor: [200, 100, 20] },
+      7: { halign: 'right', fontStyle: 'bold' },
     },
     didDrawPage: (data) => {
       // Footer page number

@@ -16,7 +16,7 @@ import type {
   Transaction,
   TxType,
 } from '@/lib/types'
-import { PAYMENT_METHODS, paymentMethodLabel } from '@/lib/types'
+import { PAYMENT_METHODS, paymentMethodLabel, getTxPaidPaise, getTxPendingPaise, getTxPaymentStatus } from '@/lib/types'
 
 export type { AuditEntry } from '@/lib/excel-storage'
 
@@ -65,11 +65,34 @@ function mapGTransactions(rawList: any[]): Transaction[] {
     let contact = t.contact_number ? String(t.contact_number).replace(/^'/, '').trim() : null
     if (contact === '#ERROR!' || contact === '') contact = null
 
+    const totalPaise = toPaise(t.amount)
+    const isExpense = String(t.type || 'expense').toLowerCase() === 'expense'
+
+    let paidPaise: number
+    if (t.paid !== undefined && t.paid !== null && String(t.paid).trim() !== '') {
+      paidPaise = toPaise(t.paid)
+    } else if (t.paid_amount !== undefined && t.paid_amount !== null && String(t.paid_amount).trim() !== '') {
+      paidPaise = toPaise(t.paid_amount)
+    } else {
+      paidPaise = totalPaise
+    }
+
+    let pendingPaise: number
+    if (t.pending !== undefined && t.pending !== null && String(t.pending).trim() !== '') {
+      pendingPaise = toPaise(t.pending)
+    } else if (t.pending_amount !== undefined && t.pending_amount !== null && String(t.pending_amount).trim() !== '') {
+      pendingPaise = toPaise(t.pending_amount)
+    } else {
+      pendingPaise = isExpense ? Math.max(0, totalPaise - paidPaise) : 0
+    }
+
     return {
       id: String(t.id),
       transaction_date: normalizeDate(t.transaction_date),
       type: String(t.type || 'expense').toLowerCase() as TxType,
-      amountPaise: toPaise(t.amount),
+      amountPaise: totalPaise,
+      paidPaise,
+      pendingPaise,
       category_id: String(t.category_id || t.category_name || ''),
       category_name: String(t.category_name || 'Uncategorized'),
       person_name: t.person_name ? String(t.person_name) : null,
@@ -116,21 +139,32 @@ export async function getSummary(from: string | null, to: string | null): Promis
 
     let priorNet = 0
     let income = 0
-    let expense = 0
+    let paidExpense = 0
+    let totalExpense = 0
+    let pendingExpense = 0
     let count = 0
 
     for (const t of all) {
+      const isIncome = t.type === 'income'
+      const paid = getTxPaidPaise(t)
+      const pending = getTxPendingPaise(t)
+
       if (from && t.transaction_date < from) {
-        if (t.type === 'income') priorNet += t.amountPaise
-        else priorNet -= t.amountPaise
+        if (isIncome) priorNet += paid
+        else priorNet -= paid
       }
 
       const afterOrEqualFrom = !from || t.transaction_date >= from
       const beforeOrEqualTo = !to || t.transaction_date <= to
 
       if (afterOrEqualFrom && beforeOrEqualTo) {
-        if (t.type === 'income') income += t.amountPaise
-        else expense += t.amountPaise
+        if (isIncome) {
+          income += t.amountPaise
+        } else {
+          totalExpense += t.amountPaise
+          paidExpense += paid
+          pendingExpense += pending
+        }
         count++
       }
     }
@@ -142,8 +176,10 @@ export async function getSummary(from: string | null, to: string | null): Promis
       orgOpeningPaise: orgOpening,
       periodOpeningPaise: periodOpening,
       incomePaise: income,
-      expensePaise: expense,
-      closingPaise: periodOpening + income - expense,
+      expensePaise: paidExpense, // Actual cash outflow
+      totalExpensePaise: totalExpense, // Total incurred bill amount
+      pendingExpensePaise: pendingExpense, // Pending payable
+      closingPaise: periodOpening + income - paidExpense,
       transactionCount: count,
     }
   }
@@ -175,7 +211,7 @@ export async function getPeriodTotals(
       }
       const rec = map.get(period)!
       if (t.type === 'income') rec.incomePaise += t.amountPaise
-      else rec.expensePaise += t.amountPaise
+      else rec.expensePaise += getTxPaidPaise(t)
     }
 
     const result: PeriodTotal[] = []
@@ -325,6 +361,9 @@ export async function getTransactions(filters: excelStorage.TransactionFilters) 
 
     if (filters.type) {
       all = all.filter((t) => t.type === filters.type)
+    }
+    if (filters.status && filters.status !== 'all') {
+      all = all.filter((t) => getTxPaymentStatus(t) === filters.status)
     }
     if (filters.categoryId) {
       const catIdLower = filters.categoryId.toLowerCase()

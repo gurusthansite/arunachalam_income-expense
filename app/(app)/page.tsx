@@ -94,6 +94,24 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         </div>
       )}
 
+      {Boolean(summary.pendingExpensePaise && summary.pendingExpensePaise > 0) && (
+        <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300">
+          <div className="flex items-center gap-3">
+            <Clock className="size-5 shrink-0 text-rose-600 dark:text-rose-400" />
+            <div className="text-sm">
+              <span className="font-semibold">Pending / Due Expenses: </span>
+              You have <span className="font-bold underline">{formatINR(summary.pendingExpensePaise!)}</span> in unpaid expenses for this period. Cash balance is only deducted when paid.
+            </div>
+          </div>
+          <Link
+            href="/transactions?type=expense&status=pending"
+            className="text-xs font-semibold underline hover:text-rose-950 dark:hover:text-rose-100 whitespace-nowrap ml-2"
+          >
+            View Pending &rarr;
+          </Link>
+        </div>
+      )}
+
       {/* 4 Main Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -125,7 +143,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         />
 
         <StatCard
-          title="Total Expenses"
+          title="Expenses (Paid Out)"
           amount={
             summary.expensePaise > 0
               ? `-${formatINR(summary.expensePaise)}`
@@ -133,7 +151,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 ? `+${formatINR(Math.abs(summary.expensePaise))}`
                 : formatINR(0)
           }
-          subtext="Total organization outflow"
+          subtext={
+            summary.pendingExpensePaise && summary.pendingExpensePaise > 0
+              ? `Total: ${formatINR(summary.totalExpensePaise ?? summary.expensePaise)} • Due: ${formatINR(summary.pendingExpensePaise)}`
+              : 'Total cash paid outflow'
+          }
           icon={TrendingDown}
           variant="expense"
         />
@@ -141,7 +163,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         <StatCard
           title="Current Balance"
           amount={formatINR(summary.closingPaise)}
-          subtext="Opening + Income − Expenses"
+          subtext="Opening + Income − Paid Expenses"
           icon={Wallet}
           variant="balance"
           isWarning={isBalanceNegative}

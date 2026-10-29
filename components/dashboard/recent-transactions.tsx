@@ -14,7 +14,7 @@ import {
 import { formatDate } from '@/lib/dates'
 import { formatINR } from '@/lib/money'
 import { cn } from '@/lib/utils'
-import { paymentMethodLabel, type Transaction } from '@/lib/types'
+import { paymentMethodLabel, getTxPaidPaise, getTxPendingPaise, type Transaction } from '@/lib/types'
 
 interface RecentTransactionsProps {
   transactions: Transaction[]
@@ -102,7 +102,18 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
                           const isIncome = tx.type === 'income'
                           const isNegative = tx.amountPaise < 0
                           const sign = isIncome ? (isNegative ? '-' : '+') : (isNegative ? '+' : '-')
-                          return `${sign}${formatINR(Math.abs(tx.amountPaise))}`
+                          const pending = getTxPendingPaise(tx)
+                          const paid = getTxPaidPaise(tx)
+                          return (
+                            <div>
+                              <div>{`${sign}${formatINR(Math.abs(tx.amountPaise))}`}</div>
+                              {!isIncome && pending > 0 && (
+                                <span className="block text-[10px] font-normal text-rose-600 dark:text-rose-400">
+                                  {paid <= 0 ? 'Unpaid' : `Paid: ₹${paid / 100} • Due: ₹${pending / 100}`}
+                                </span>
+                              )}
+                            </div>
+                          )
                         })()}
                       </TableCell>
                     </TableRow>
