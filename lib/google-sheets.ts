@@ -1,7 +1,14 @@
 import 'server-only'
 
-export function getGoogleSheetsScriptUrl(): string | null {
-  return process.env.GOOGLE_SHEETS_APP_SCRIPT_URL || null
+const DEFAULT_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbxVNp05J2CRBox0DZ_FlIrl0yyDO5nBiCa0ty9yHswJz-QprZmLR7INrD1H0c_-nvbF/exec'
+
+export function getGoogleSheetsScriptUrl(): string {
+  return (
+    process.env.GOOGLE_SHEETS_APP_SCRIPT_URL ||
+    process.env.GOOGLE_SHEETS_SCRIPT_URL ||
+    DEFAULT_SCRIPT_URL
+  )
 }
 
 export async function fetchGoogleSheetsData() {
