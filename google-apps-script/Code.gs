@@ -534,6 +534,17 @@ function doPost(e) {
       return jsonResponse({ ok: true, message: 'Settings saved to Sheet' });
     }
 
+    if (action === 'addCategory') {
+      var sheet = ss.getSheetByName('Categories');
+      if (!sheet) {
+        setupCategoriesSheet(ss);
+        sheet = ss.getSheetByName('Categories');
+      }
+      var id = 'cat_' + new Date().getTime() + '_' + Math.floor(Math.random() * 1000);
+      sheet.appendRow([id, payload.name, String(payload.type).toLowerCase(), 'Active']);
+      return jsonResponse({ ok: true, id: id, message: 'Category added to Sheet' });
+    }
+
     return jsonResponse({ ok: false, error: 'Unsupported action: ' + action });
   } catch (err) {
     return jsonResponse({ ok: false, error: err.toString() });

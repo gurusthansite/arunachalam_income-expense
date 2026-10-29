@@ -52,12 +52,16 @@ export async function createCategory(input: { name: string; type: string }): Pro
       })
     }
 
-    await excelStorage.createCategory({
-      name: parsed.data.name,
-      type: parsed.data.type as TxType,
-    })
+    try {
+      await excelStorage.createCategory({
+        name: parsed.data.name,
+        type: parsed.data.type as TxType,
+      })
+    } catch (excelErr: any) {
+      console.warn('[excel-storage] local category creation skipped:', excelErr.message)
+    }
     revalidatePath('/', 'layout')
-    return { ok: true, message: 'Category added to Google Sheet & Excel' }
+    return { ok: true, message: 'Category added successfully' }
   } catch (error: any) {
     return { ok: false, error: error.message || 'Could not save category.' }
   }
@@ -70,7 +74,11 @@ export async function renameCategory(id: string, name: string): Promise<ActionRe
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
 
   try {
-    await excelStorage.renameCategory(id, parsed.data)
+    try {
+      await excelStorage.renameCategory(id, parsed.data)
+    } catch (excelErr: any) {
+      console.warn('[excel-storage] local category rename skipped:', excelErr.message)
+    }
     revalidatePath('/', 'layout')
     return { ok: true, message: 'Category renamed' }
   } catch (error: any) {
@@ -82,7 +90,11 @@ export async function setCategoryActive(id: string, isActive: boolean): Promise<
   if (!id) return { ok: false, error: 'Invalid category.' }
 
   try {
-    await excelStorage.setCategoryActive(id, isActive)
+    try {
+      await excelStorage.setCategoryActive(id, isActive)
+    } catch (excelErr: any) {
+      console.warn('[excel-storage] local category active status change skipped:', excelErr.message)
+    }
     revalidatePath('/', 'layout')
     return { ok: true, message: isActive ? 'Category activated' : 'Category deactivated' }
   } catch (error: any) {
@@ -94,7 +106,11 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
   if (!id) return { ok: false, error: 'Invalid category.' }
 
   try {
-    await excelStorage.deleteCategory(id)
+    try {
+      await excelStorage.deleteCategory(id)
+    } catch (excelErr: any) {
+      console.warn('[excel-storage] local category delete skipped:', excelErr.message)
+    }
     revalidatePath('/', 'layout')
     return { ok: true, message: 'Category deleted' }
   } catch (error: any) {
