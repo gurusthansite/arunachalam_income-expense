@@ -141,7 +141,10 @@ export async function deleteTransaction(id: string): Promise<ActionResult> {
         id,
       })
       if (gRes && !gRes.ok) {
-        throw new Error(gRes.error || 'Failed to delete from Google Sheets')
+        const errMsg = String(gRes.error || '')
+        if (!errMsg.toLowerCase().includes('not found')) {
+          throw new Error(errMsg || 'Failed to delete from Google Sheets')
+        }
       }
     }
 
