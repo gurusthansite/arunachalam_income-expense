@@ -13,18 +13,13 @@ export function getGoogleSheetsScriptUrl(): string {
 }
 
 let memoryCache: { data: any; timestamp: number } | null = null
-const CACHE_TTL_MS = 3000 // 3-second cache: batches simultaneous queries on the same page into 1 fast request
+const CACHE_TTL_MS = 60000 // 60-second cache: makes page transitions instant (0ms) instead of waiting 4 seconds every time
 
 export function invalidateGoogleSheetsCache() {
   memoryCache = null
 }
 
-async function fetchRawGoogleSheetsData() {
-  const now = Date.now()
-  if (memoryCache && now - memoryCache.timestamp < CACHE_TTL_MS) {
-    return memoryCache.data
-  }
-
+async function fetchFromGoogleSheets(): Promise<any> {
   const url = getGoogleSheetsScriptUrl()
   if (!url) return null
 
@@ -36,7 +31,7 @@ async function fetchRawGoogleSheetsData() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     if (!data.ok) throw new Error(data.error || 'Failed to fetch from Google Sheets')
-    memoryCache = { data, timestamp: now }
+    memoryCache = { data, timestamp: Date.now() }
     return data
   } catch (err: any) {
     console.error('Error fetching Google Sheets data:', err.message)
@@ -44,10 +39,54 @@ async function fetchRawGoogleSheetsData() {
   }
 }
 
+async function fetchRawGoogleSheetsData() {
+  const now = Date.now()
+  // 1. If we have fresh cached data (< 60s), return it immediately (0ms latency)
+  if (memoryCache && now - memoryCache.timestamp < CACHE_TTL_MS) {
+    return memoryCache.data
+  }
+
+  // 2. If we have stale cache, return it immediately and refresh in background (Stale-While-Revalidate)
+  if (memoryCache) {
+    fetchFromGoogleSheets().catch(() => {})
+    return memoryCache.data
+  }
+
+  // 3. Otherwise fetch fresh data
+  return await fetchFromGoogleSheets()
+}
+
 export const fetchGoogleSheetsData = cache(fetchRawGoogleSheetsData)
 
 export async function postGoogleSheetsAction(payload: any) {
-  invalidateGoogleSheetsCache()
+  const now = Date.now()
+  // Optimistic cache update for instant UI feedback
+  if (memoryCache?.data) {
+    const data = memoryCache.data
+    if (payload.action === 'addTransaction') {
+      const tempId = 'tx_' + now + '_' + Math.floor(Math.random() * 1000)
+      const newTx = {
+        id: tempId,
+        transaction_date: payload.date,
+        type: String(payload.type).toLowerCase(),
+        amount: Number(payload.amount),
+        category_name: payload.category || 'Uncategorized',
+        person_name: payload.party || null,
+        payment_method: payload.paymentMethod || 'Cash',
+        reference_number: payload.referenceNumber || null,
+        description: payload.description || null,
+        created_at: new Date().toISOString(),
+      }
+      data.transactions = [newTx, ...(data.transactions || [])]
+      memoryCache = { data, timestamp: now }
+    } else if (payload.action === 'deleteTransaction') {
+      if (data.transactions) {
+        data.transactions = data.transactions.filter((t: any) => String(t.id) !== String(payload.id))
+      }
+      memoryCache = { data, timestamp: now }
+    }
+  }
+
   const url = getGoogleSheetsScriptUrl()
   if (!url) return null
 
@@ -59,7 +98,10 @@ export async function postGoogleSheetsAction(payload: any) {
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const result = await res.json()
-    invalidateGoogleSheetsCache()
+    // Revalidate cache in background after successful Google Sheets persistence
+    setTimeout(() => {
+      fetchFromGoogleSheets().catch(() => {})
+    }, 1000)
     return result
   } catch (err: any) {
     console.error('Error posting to Google Sheets:', err.message)
