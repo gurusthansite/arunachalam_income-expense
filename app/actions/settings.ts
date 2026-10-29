@@ -14,18 +14,26 @@ export async function updateSettings(input: Record<string, string>): Promise<Act
 
   try {
     if (getGoogleSheetsScriptUrl()) {
-      await postGoogleSheetsAction({
+      const gRes = await postGoogleSheetsAction({
         action: 'updateSettings',
         settings: parsed.data,
       })
+      if (gRes && !gRes.ok) {
+        throw new Error(gRes.error || 'Failed to update settings in Google Sheets')
+      }
     }
 
-    await excelStorage.updateSettings(parsed.data as any)
+    try {
+      await excelStorage.updateSettings(parsed.data as any)
+    } catch (excelErr: any) {
+      console.warn('[excel-storage] local file update skipped:', excelErr.message)
+    }
+
     revalidatePath('/', 'layout')
-    return { ok: true, message: 'Settings saved to Google Sheet & Excel' }
+    return { ok: true, message: 'Settings saved successfully!' }
   } catch (error: any) {
     console.error('[settings] update failed', error.message)
-    return { ok: false, error: 'Could not save settings.' }
+    return { ok: false, error: error.message || 'Could not save settings.' }
   }
 }
 

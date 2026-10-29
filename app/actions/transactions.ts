@@ -33,7 +33,7 @@ export async function createTransaction(input: TransactionInput): Promise<Action
   try {
     // 1. Save to Google Sheets if connected
     if (getGoogleSheetsScriptUrl()) {
-      await postGoogleSheetsAction({
+      const gRes = await postGoogleSheetsAction({
         action: 'addTransaction',
         date: values.transaction_date,
         type: values.type,
@@ -44,25 +44,32 @@ export async function createTransaction(input: TransactionInput): Promise<Action
         referenceNumber: values.reference_number || '',
         description: values.description || '',
       })
+      if (gRes && !gRes.ok) {
+        throw new Error(gRes.error || 'Failed to save to Google Sheets')
+      }
     }
 
-    // 2. Save to local Excel backup
-    await excelStorage.createTransaction({
-      type: values.type,
-      transaction_date: values.transaction_date,
-      amount: values.amount,
-      category_id: values.category_id,
-      payment_method: values.payment_method,
-      person_name: values.person_name,
-      description: values.description,
-      reference_number: values.reference_number,
-    })
+    // 2. Save to local Excel backup (safe wrapper for read-only serverless environments like Vercel)
+    try {
+      await excelStorage.createTransaction({
+        type: values.type,
+        transaction_date: values.transaction_date,
+        amount: values.amount,
+        category_id: values.category_id,
+        payment_method: values.payment_method,
+        person_name: values.person_name,
+        description: values.description,
+        reference_number: values.reference_number,
+      })
+    } catch (excelErr: any) {
+      console.warn('[excel-storage] local file write skipped (read-only filesystem):', excelErr.message)
+    }
 
     revalidatePath('/', 'layout')
-    return { ok: true, message: `${values.type === 'income' ? 'Income' : 'Expense'} saved to Google Sheet!` }
+    return { ok: true, message: `${values.type === 'income' ? 'Income' : 'Expense'} saved successfully!` }
   } catch (error: any) {
-    console.error('[transactions] insert failed', error.message)
-    return { ok: false, error: 'Could not save the transaction. Please try again.' }
+    console.error('[transactions] insert failed:', error.message)
+    return { ok: false, error: error.message || 'Could not save the transaction. Please try again.' }
   }
 }
 
@@ -80,7 +87,7 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
 
   try {
     if (getGoogleSheetsScriptUrl()) {
-      await postGoogleSheetsAction({
+      const gRes = await postGoogleSheetsAction({
         action: 'updateTransaction',
         id,
         date: values.transaction_date,
@@ -92,24 +99,31 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
         referenceNumber: values.reference_number || '',
         description: values.description || '',
       })
+      if (gRes && !gRes.ok) {
+        throw new Error(gRes.error || 'Failed to update in Google Sheets')
+      }
     }
 
-    await excelStorage.updateTransaction(id, {
-      type: values.type,
-      transaction_date: values.transaction_date,
-      amount: values.amount,
-      category_id: values.category_id,
-      payment_method: values.payment_method,
-      person_name: values.person_name,
-      description: values.description,
-      reference_number: values.reference_number,
-    })
+    try {
+      await excelStorage.updateTransaction(id, {
+        type: values.type,
+        transaction_date: values.transaction_date,
+        amount: values.amount,
+        category_id: values.category_id,
+        payment_method: values.payment_method,
+        person_name: values.person_name,
+        description: values.description,
+        reference_number: values.reference_number,
+      })
+    } catch (excelErr: any) {
+      console.warn('[excel-storage] local file update skipped:', excelErr.message)
+    }
 
     revalidatePath('/', 'layout')
-    return { ok: true, message: 'Transaction updated in Google Sheet!' }
+    return { ok: true, message: 'Transaction updated successfully!' }
   } catch (error: any) {
     console.error('[transactions] update failed', error.message)
-    return { ok: false, error: 'Could not update the transaction. Please try again.' }
+    return { ok: false, error: error.message || 'Could not update the transaction. Please try again.' }
   }
 }
 
@@ -118,15 +132,23 @@ export async function deleteTransaction(id: string): Promise<ActionResult> {
 
   try {
     if (getGoogleSheetsScriptUrl()) {
-      await postGoogleSheetsAction({
+      const gRes = await postGoogleSheetsAction({
         action: 'deleteTransaction',
         id,
       })
+      if (gRes && !gRes.ok) {
+        throw new Error(gRes.error || 'Failed to delete from Google Sheets')
+      }
     }
 
-    await excelStorage.deleteTransaction(id)
+    try {
+      await excelStorage.deleteTransaction(id)
+    } catch (excelErr: any) {
+      console.warn('[excel-storage] local file delete skipped:', excelErr.message)
+    }
+
     revalidatePath('/', 'layout')
-    return { ok: true, message: 'Transaction removed from Google Sheet!' }
+    return { ok: true, message: 'Transaction removed successfully!' }
   } catch (error: any) {
     console.error('[transactions] delete failed', error.message)
     return { ok: false, error: error.message || 'Could not delete the transaction.' }
