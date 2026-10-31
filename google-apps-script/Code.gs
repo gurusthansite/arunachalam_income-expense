@@ -8,6 +8,7 @@ function onOpen() {
   ui.createMenu('Ledger App')
     .addItem('Setup All Sheets', 'setupCompleteSheeting')
     .addItem('Add Paid, Pending & Phone Number Columns', 'updateSheetColumns')
+    .addItem('Repair & Realign Data Rows', 'repairAndAlignDataRows')
     .addItem('Add Sample Transactions', 'addSampleTransactions')
     .addToUi();
 }
@@ -17,6 +18,16 @@ function onOpen() {
  * Completely safe for all existing transactions!
  */
 function ensureTransactionsColumns(sheet) {
+  var lastRow = sheet.getLastRow();
+  // Auto-detect if row 2 has shifted data (e.g. column E contains category text instead of numbers)
+  if (lastRow > 1) {
+    var sampleE = sheet.getRange(2, 5).getValue();
+    if (isNaN(Number(sampleE)) && String(sampleE || '').trim() !== '') {
+      repairAndAlignDataRows();
+      SpreadsheetApp.flush();
+    }
+  }
+
   var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
   var colMap = {};
   for (var c = 0; c < headers.length; c++) {
@@ -37,7 +48,6 @@ function ensureTransactionsColumns(sheet) {
     sheet.setColumnWidth(amtCol + 1, 125);
     sheet.setColumnWidth(amtCol + 2, 125);
 
-    var lastRow = sheet.getLastRow();
     if (lastRow > 1) {
       var amounts = sheet.getRange(2, amtCol, lastRow - 1, 1).getValues();
       var pVals = [];
@@ -85,23 +95,108 @@ function ensureTransactionsColumns(sheet) {
   return colMap;
 }
 
-function updateSheetColumns() {
+/**
+ * 1-Click Repair & Align Tool:
+ * Automatically detects rows where headers were shifted and places every value in the correct column!
+ */
+function repairAndAlignDataRows() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
-  ensureTransactionsColumns(sheet);
+  if (!sheet) return;
+
+  var standardHeaders = [
+    'ID', 'Date', 'Type', 'Amount', 'Paid', 'Pending',
+    'Category', 'Party', 'Phone Number', 'PaymentMethod',
+    'ReferenceNumber', 'Description', 'CreatedAt'
+  ];
+
+  sheet.getRange(1, 1, 1, standardHeaders.length)
+    .setValues([standardHeaders])
+    .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e293b')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle');
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return;
+
+  var lastCol = Math.max(standardHeaders.length, sheet.getLastColumn());
+  var data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  var fixedRows = [];
+
+  for (var i = 0; i < data.length; i++) {
+    var r = data[i];
+    var id = String(r[0] || '').trim();
+    if (!id) continue;
+
+    var date = r[1];
+    var type = String(r[2] || 'expense').toLowerCase();
+    var amt = Number(r[3] || 0);
+
+    var colE = r[4];
+    var colF = r[5];
+    var colG = r[6];
+    var colJ = r[9];
+
+    // Detect if this row is shifted (Col E has category text like "Other Expenses", or Col J has timestamp, or Col G has "upi")
+    var isShifted = (isNaN(Number(colE)) && String(colE || '').trim() !== '') ||
+                    (String(colJ || '').indexOf('T') > 0 && String(colJ || '').indexOf('Z') > 0) ||
+                    ['upi', 'cash', 'bank transfer', 'bank_transfer', 'cheque'].indexOf(String(colG || '').toLowerCase()) >= 0;
+
+    var paid, pending, category, party, phone, paymentMethod, refNum, desc, createdAt;
+
+    if (isShifted) {
+      paid = amt;
+      pending = 0;
+      category = String(colE || 'Uncategorized');
+      party = colF ? String(colF) : '';
+      phone = '';
+      paymentMethod = colG ? String(colG) : 'Cash';
+      refNum = r[7] ? String(r[7]) : '';
+      desc = r[8] ? String(r[8]) : '';
+      createdAt = colJ ? String(colJ) : new Date().toISOString();
+    } else {
+      paid = (colE !== '' && colE !== null && !isNaN(Number(colE))) ? Number(colE) : amt;
+      pending = (colF !== '' && colF !== null && !isNaN(Number(colF))) ? Number(colF) : Math.max(0, amt - paid);
+      category = r[6] ? String(r[6]) : 'Uncategorized';
+      party = r[7] ? String(r[7]) : '';
+      phone = r[8] ? String(r[8]).replace(/^'/, '') : '';
+      paymentMethod = r[9] ? String(r[9]) : 'Cash';
+      refNum = r[10] ? String(r[10]) : '';
+      desc = r[11] ? String(r[11]) : '';
+      createdAt = r[12] ? String(r[12]) : (colJ ? String(colJ) : new Date().toISOString());
+    }
+
+    if (phone && phone.indexOf("'") !== 0) {
+      phone = "'" + phone;
+    }
+
+    fixedRows.push([
+      id, date, type, amt, paid, pending, category, party, phone, paymentMethod, refNum, desc, createdAt
+    ]);
+  }
+
+  if (fixedRows.length > 0) {
+    sheet.getRange(2, 1, fixedRows.length, standardHeaders.length).setValues(fixedRows);
+    sheet.getRange(2, 4, fixedRows.length, 3).setNumberFormat('#,##0.00'); // Amount, Paid, Pending
+    sheet.getRange(2, 9, fixedRows.length, 1).setNumberFormat('@'); // Phone Number
+  }
+
   SpreadsheetApp.flush();
 }
 
+function updateSheetColumns() {
+  repairAndAlignDataRows();
+}
+
 function addPaidAndPendingColumns() {
-  updateSheetColumns();
+  repairAndAlignDataRows();
 }
 
 function addPhoneNumberColumn() {
-  updateSheetColumns();
+  repairAndAlignDataRows();
 }
 
 function addContactNumberColumn() {
-  updateSheetColumns();
+  repairAndAlignDataRows();
 }
 
 /**
@@ -713,8 +808,39 @@ function getTransactionsData(ss) {
     var createdIdx = colMap['createdat'] !== undefined ? colMap['createdat'] : (contactIdx === -1 ? 9 : 10);
 
     var amtVal = Number(r[amtIdx] || 0);
-    var paidVal = paidIdx >= 0 && r[paidIdx] !== '' && r[paidIdx] !== null ? Number(r[paidIdx]) : amtVal;
-    var pendingVal = pendingIdx >= 0 && r[pendingIdx] !== '' && r[pendingIdx] !== null ? Number(r[pendingIdx]) : Math.max(0, amtVal - paidVal);
+
+    // Auto-detect if row was written in old 10-column layout before Paid/Pending were inserted
+    var valColE = paidIdx >= 0 ? r[paidIdx] : r[4];
+    var valColG = catIdx >= 0 ? r[catIdx] : r[6];
+    var valColJ = methodIdx >= 0 ? r[methodIdx] : r[9];
+
+    var isShifted = (isNaN(Number(valColE)) && String(valColE || '').trim() !== '') ||
+                    (String(valColJ || '').indexOf('T') > 0 && String(valColJ || '').indexOf('Z') > 0) ||
+                    ['upi', 'cash', 'bank transfer', 'bank_transfer', 'cheque'].indexOf(String(valColG || '').toLowerCase()) >= 0;
+
+    var paidVal, pendingVal, categoryName, personName, contactNumber, paymentMethod, refNumber, description, createdAt;
+
+    if (isShifted) {
+      paidVal = amtVal;
+      pendingVal = 0;
+      categoryName = String(valColE || 'Uncategorized');
+      personName = r[5] ? String(r[5]) : null;
+      contactNumber = null;
+      paymentMethod = r[6] ? String(r[6]) : 'Cash';
+      refNumber = r[7] ? String(r[7]) : null;
+      description = r[8] ? String(r[8]) : null;
+      createdAt = r[9] ? String(r[9]) : '';
+    } else {
+      paidVal = paidIdx >= 0 && r[paidIdx] !== '' && r[paidIdx] !== null && !isNaN(Number(r[paidIdx])) ? Number(r[paidIdx]) : amtVal;
+      pendingVal = pendingIdx >= 0 && r[pendingIdx] !== '' && r[pendingIdx] !== null && !isNaN(Number(r[pendingIdx])) ? Number(r[pendingIdx]) : Math.max(0, amtVal - paidVal);
+      categoryName = catIdx >= 0 && r[catIdx] ? String(r[catIdx]) : 'Uncategorized';
+      personName = partyIdx >= 0 && r[partyIdx] ? String(r[partyIdx]) : null;
+      contactNumber = contactIdx >= 0 && r[contactIdx] ? String(r[contactIdx]).replace(/^'/, '').trim() : null;
+      paymentMethod = methodIdx >= 0 && r[methodIdx] ? String(r[methodIdx]) : 'Cash';
+      refNumber = refIdx >= 0 && r[refIdx] ? String(r[refIdx]) : null;
+      description = descIdx >= 0 && r[descIdx] ? String(r[descIdx]) : null;
+      createdAt = createdIdx >= 0 && r[createdIdx] ? String(r[createdIdx]) : '';
+    }
 
     transactions.push({
       id: id,
@@ -723,13 +849,13 @@ function getTransactionsData(ss) {
       amount: amtVal,
       paid: paidVal,
       pending: pendingVal,
-      category_name: catIdx >= 0 && r[catIdx] ? String(r[catIdx]) : 'Uncategorized',
-      person_name: partyIdx >= 0 && r[partyIdx] ? String(r[partyIdx]) : null,
-      contact_number: contactIdx >= 0 && r[contactIdx] ? String(r[contactIdx]).replace(/^'/, '').trim() : null,
-      payment_method: methodIdx >= 0 && r[methodIdx] ? String(r[methodIdx]) : 'Cash',
-      reference_number: refIdx >= 0 && r[refIdx] ? String(r[refIdx]) : null,
-      description: descIdx >= 0 && r[descIdx] ? String(r[descIdx]) : null,
-      created_at: createdIdx >= 0 && r[createdIdx] ? String(r[createdIdx]) : ''
+      category_name: categoryName,
+      person_name: personName,
+      contact_number: contactNumber,
+      payment_method: paymentMethod,
+      reference_number: refNumber,
+      description: description,
+      created_at: createdAt
     });
   }
   return transactions;

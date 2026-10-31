@@ -68,22 +68,47 @@ function mapGTransactions(rawList: any[]): Transaction[] {
     const totalPaise = toPaise(t.amount)
     const isExpense = String(t.type || 'expense').toLowerCase() === 'expense'
 
-    let paidPaise: number
-    if (t.paid !== undefined && t.paid !== null && String(t.paid).trim() !== '') {
-      paidPaise = toPaise(t.paid)
-    } else if (t.paid_amount !== undefined && t.paid_amount !== null && String(t.paid_amount).trim() !== '') {
-      paidPaise = toPaise(t.paid_amount)
-    } else {
-      paidPaise = totalPaise
-    }
+    // Detect shifted rows (e.g. if category_name is a payment method like 'upi', or paid is text like 'Other Expenses')
+    const rawPaidStr = String(t.paid ?? '').trim()
+    const rawCatStr = String(t.category_name ?? '').trim().toLowerCase()
+    const isShifted =
+      (isNaN(Number(t.paid)) && rawPaidStr !== '') ||
+      ['upi', 'cash', 'bank transfer', 'bank_transfer', 'cheque'].includes(rawCatStr)
 
+    let categoryName = String(t.category_name || 'Uncategorized')
+    let personName = t.person_name ? String(t.person_name) : null
+    let paymentMethod = String(t.payment_method || 'Cash')
+    let paidPaise: number
     let pendingPaise: number
-    if (t.pending !== undefined && t.pending !== null && String(t.pending).trim() !== '') {
-      pendingPaise = toPaise(t.pending)
-    } else if (t.pending_amount !== undefined && t.pending_amount !== null && String(t.pending_amount).trim() !== '') {
-      pendingPaise = toPaise(t.pending_amount)
+
+    if (isShifted) {
+      if (isNaN(Number(t.paid)) && rawPaidStr !== '') {
+        categoryName = rawPaidStr
+      }
+      if (t.pending && typeof t.pending === 'string' && isNaN(Number(t.pending))) {
+        personName = t.pending.trim()
+      }
+      if (['upi', 'cash', 'bank transfer', 'bank_transfer', 'cheque'].includes(rawCatStr)) {
+        paymentMethod = t.category_name
+      }
+      paidPaise = totalPaise
+      pendingPaise = 0
     } else {
-      pendingPaise = isExpense ? Math.max(0, totalPaise - paidPaise) : 0
+      if (t.paid !== undefined && t.paid !== null && String(t.paid).trim() !== '' && !isNaN(Number(t.paid))) {
+        paidPaise = toPaise(t.paid)
+      } else if (t.paid_amount !== undefined && t.paid_amount !== null && String(t.paid_amount).trim() !== '' && !isNaN(Number(t.paid_amount))) {
+        paidPaise = toPaise(t.paid_amount)
+      } else {
+        paidPaise = totalPaise
+      }
+
+      if (t.pending !== undefined && t.pending !== null && String(t.pending).trim() !== '' && !isNaN(Number(t.pending))) {
+        pendingPaise = toPaise(t.pending)
+      } else if (t.pending_amount !== undefined && t.pending_amount !== null && String(t.pending_amount).trim() !== '' && !isNaN(Number(t.pending_amount))) {
+        pendingPaise = toPaise(t.pending_amount)
+      } else {
+        pendingPaise = isExpense ? Math.max(0, totalPaise - paidPaise) : 0
+      }
     }
 
     return {
@@ -93,11 +118,11 @@ function mapGTransactions(rawList: any[]): Transaction[] {
       amountPaise: totalPaise,
       paidPaise,
       pendingPaise,
-      category_id: String(t.category_id || t.category_name || ''),
-      category_name: String(t.category_name || 'Uncategorized'),
-      person_name: t.person_name ? String(t.person_name) : null,
+      category_id: String(t.category_id || categoryName),
+      category_name: categoryName,
+      person_name: personName,
       contact_number: contact,
-      payment_method: String(t.payment_method || 'Cash'),
+      payment_method: paymentMethod,
       reference_number: t.reference_number ? String(t.reference_number) : null,
       description: t.description ? String(t.description) : null,
     }
