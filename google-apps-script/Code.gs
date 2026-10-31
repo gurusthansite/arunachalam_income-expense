@@ -175,9 +175,25 @@ function repairAndAlignDataRows() {
   }
 
   if (fixedRows.length > 0) {
+    // Clear old conflicting data validations (e.g. old payment method dropdown on Column H)
+    sheet.getRange(2, 1, Math.max(1, sheet.getLastRow() - 1), Math.max(standardHeaders.length, sheet.getLastColumn())).clearDataValidations();
+
     sheet.getRange(2, 1, fixedRows.length, standardHeaders.length).setValues(fixedRows);
     sheet.getRange(2, 4, fixedRows.length, 3).setNumberFormat('#,##0.00'); // Amount, Paid, Pending
     sheet.getRange(2, 9, fixedRows.length, 1).setNumberFormat('@'); // Phone Number
+
+    // Re-apply correct data validations on proper columns
+    var typeRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['income', 'expense'], true)
+      .setAllowInvalid(true)
+      .build();
+    sheet.getRange('C2:C').setDataValidation(typeRule).setHorizontalAlignment('center');
+
+    var methodRule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'], true)
+      .setAllowInvalid(true)
+      .build();
+    sheet.getRange('J2:J').setDataValidation(methodRule).setHorizontalAlignment('center');
   }
 
   SpreadsheetApp.flush();
@@ -413,21 +429,21 @@ function setupTransactionsSheet(ss) {
 
   var typeRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['income', 'expense'], true)
-    .setAllowInvalid(false)
+    .setAllowInvalid(true)
     .build();
   sheet.getRange('C2:C').setDataValidation(typeRule).setHorizontalAlignment('center');
 
-  sheet.getRange('D2:D').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange('D2:F').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
-  sheet.getRange('G2:G').setNumberFormat('@').setHorizontalAlignment('left');
+  sheet.getRange('I2:I').setNumberFormat('@').setHorizontalAlignment('left');
 
   var methodRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'], true)
-    .setAllowInvalid(false)
+    .setAllowInvalid(true)
     .build();
-  sheet.getRange('H2:H').setDataValidation(methodRule).setHorizontalAlignment('center');
+  sheet.getRange('J2:J').setDataValidation(methodRule).setHorizontalAlignment('center');
 
-  sheet.getRange('K2:K').setNumberFormat('yyyy-mm-dd hh:mm:ss');
+  sheet.getRange('M2:M').setNumberFormat('yyyy-mm-dd hh:mm:ss');
 }
 
 function setupCategoriesSheet(ss) {
