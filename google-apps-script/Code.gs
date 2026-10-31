@@ -7,21 +7,16 @@ function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('Ledger App')
     .addItem('Setup All Sheets', 'setupCompleteSheeting')
-    .addItem('Add Paid & Pending Columns', 'addPaidAndPendingColumns')
-    .addItem('Add Contact Number Column', 'addContactNumberColumn')
-    .addItem('Re-apply Formatting', 'setupCompleteSheeting')
+    .addItem('Add Paid, Pending & Phone Number Columns', 'updateSheetColumns')
     .addItem('Add Sample Transactions', 'addSampleTransactions')
     .addToUi();
 }
 
 /**
- * 1-Click Function to insert Paid & Pending Columns
- * Keeps all existing rows 100% safe!
+ * 1-Click Function to ensure all needed columns exist (Paid, Pending, Phone Number)
+ * Completely safe for all existing transactions!
  */
-function addPaidAndPendingColumns() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
-
+function ensureTransactionsColumns(sheet) {
   var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
   var colMap = {};
   for (var c = 0; c < headers.length; c++) {
@@ -29,76 +24,84 @@ function addPaidAndPendingColumns() {
     colMap[key] = c + 1; // 1-based index
   }
 
-  if (!colMap['paid']) {
+  // 1. Ensure 'Paid' and 'Pending' exist right after Amount
+  if (!colMap['paid'] || !colMap['pending']) {
     var amtCol = colMap['amount'] || 4;
-    // Insert 2 columns right after Amount
     sheet.insertColumnsAfter(amtCol, 2);
     sheet.getRange(1, amtCol + 1).setValue('Paid')
-      .setFontWeight('bold')
-      .setFontColor('#ffffff')
-      .setBackground('#1e293b')
-      .setHorizontalAlignment('center')
-      .setVerticalAlignment('middle');
+      .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e293b')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
     sheet.getRange(1, amtCol + 2).setValue('Pending')
-      .setFontWeight('bold')
-      .setFontColor('#ffffff')
-      .setBackground('#1e293b')
-      .setHorizontalAlignment('center')
-      .setVerticalAlignment('middle');
+      .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e293b')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sheet.setColumnWidth(amtCol + 1, 125);
+    sheet.setColumnWidth(amtCol + 2, 125);
 
-    sheet.setColumnWidth(amtCol + 1, 130);
-    sheet.setColumnWidth(amtCol + 2, 130);
-
-    // Populate existing rows: Paid = Amount, Pending = 0
     var lastRow = sheet.getLastRow();
     if (lastRow > 1) {
       var amounts = sheet.getRange(2, amtCol, lastRow - 1, 1).getValues();
-      var paidVals = [];
-      var pendingVals = [];
+      var pVals = [];
+      var dVals = [];
       for (var r = 0; r < amounts.length; r++) {
         var a = Number(amounts[r][0] || 0);
-        paidVals.push([a]);
-        pendingVals.push([0]);
+        pVals.push([a]);
+        dVals.push([0]);
       }
-      sheet.getRange(2, amtCol + 1, lastRow - 1, 1).setValues(paidVals).setNumberFormat('#,##0.00');
-      sheet.getRange(2, amtCol + 2, lastRow - 1, 1).setValues(pendingVals).setNumberFormat('#,##0.00');
+      sheet.getRange(2, amtCol + 1, lastRow - 1, 1).setValues(pVals).setNumberFormat('#,##0.00');
+      sheet.getRange(2, amtCol + 2, lastRow - 1, 1).setValues(dVals).setNumberFormat('#,##0.00');
+    }
+
+    // Refresh headers & colMap
+    headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+    colMap = {};
+    for (var c = 0; c < headers.length; c++) {
+      var key = String(headers[c] || '').toLowerCase().replace(/[^a-z]/g, '');
+      colMap[key] = c + 1;
     }
   }
 
+  // 2. Ensure 'Phone Number' exists right after Party
+  var hasContact = colMap['phonenumber'] || colMap['phone'] || colMap['contactnumber'] || colMap['contact'] || colMap['mobile'] || colMap['mobilenumber'];
+  if (!hasContact) {
+    var partyCol = colMap['party'] || colMap['person'] || (sheet.getLastColumn() - 3);
+    sheet.insertColumnAfter(partyCol);
+    sheet.getRange(1, partyCol + 1).setValue('Phone Number')
+      .setFontWeight('bold').setFontColor('#ffffff').setBackground('#1e293b')
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sheet.setColumnWidth(partyCol + 1, 150);
+    if (sheet.getLastRow() > 1) {
+      sheet.getRange(2, partyCol + 1, sheet.getLastRow() - 1, 1).setNumberFormat('@').setHorizontalAlignment('left');
+    }
+
+    // Refresh headers & colMap
+    headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+    colMap = {};
+    for (var c = 0; c < headers.length; c++) {
+      var key = String(headers[c] || '').toLowerCase().replace(/[^a-z]/g, '');
+      colMap[key] = c + 1;
+    }
+  }
+
+  return colMap;
+}
+
+function updateSheetColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
+  ensureTransactionsColumns(sheet);
   SpreadsheetApp.flush();
 }
 
-/**
- * 1-Click Function to insert ContactNumber into Column G
- * Keeps all existing rows 100% safe!
- */
+function addPaidAndPendingColumns() {
+  updateSheetColumns();
+}
+
+function addPhoneNumberColumn() {
+  updateSheetColumns();
+}
+
 function addContactNumberColumn() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
-
-  var firstRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-  var hasContact = false;
-  for (var c = 0; c < firstRow.length; c++) {
-    if (String(firstRow[c] || '').toLowerCase().indexOf('contact') >= 0) {
-      hasContact = true;
-      break;
-    }
-  }
-
-  if (!hasContact) {
-    // Inserts Column G right after Party (Column F)
-    sheet.insertColumnAfter(6);
-    sheet.getRange(1, 7).setValue('ContactNumber')
-      .setFontWeight('bold')
-      .setFontColor('#ffffff')
-      .setBackground('#1e293b')
-      .setHorizontalAlignment('center')
-      .setVerticalAlignment('middle');
-    sheet.setColumnWidth(7, 150);
-    sheet.getRange('G2:G').setNumberFormat('@').setHorizontalAlignment('left');
-  }
-
-  SpreadsheetApp.flush();
+  updateSheetColumns();
 }
 
 /**
@@ -284,9 +287,11 @@ function setupTransactionsSheet(ss) {
     'Date',
     'Type',
     'Amount',
+    'Paid',
+    'Pending',
     'Category',
     'Party',
-    'ContactNumber',
+    'Phone Number',
     'PaymentMethod',
     'ReferenceNumber',
     'Description',
@@ -304,7 +309,7 @@ function setupTransactionsSheet(ss) {
   sheet.setRowHeight(1, 35);
   sheet.setFrozenRows(1);
 
-  var widths = [130, 110, 95, 125, 160, 180, 150, 130, 150, 240, 180];
+  var widths = [130, 110, 95, 125, 125, 125, 160, 180, 150, 130, 150, 240, 180];
   for (var i = 0; i < widths.length; i++) {
     sheet.setColumnWidth(i + 1, widths[i]);
   }
@@ -450,6 +455,18 @@ function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : 'getData';
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
+  if (action === 'migrate' || action === 'setupColumns' || action === 'updateSheet') {
+    var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
+    if (!sheet) return jsonResponse({ ok: false, error: 'Transactions sheet not found' });
+    var colMap = ensureTransactionsColumns(sheet);
+    SpreadsheetApp.flush();
+    return jsonResponse({
+      ok: true,
+      message: 'Sheet columns updated successfully! Added Paid, Pending, and ContactNumber.',
+      columns: Object.keys(colMap)
+    });
+  }
+
   if (action === 'getData') {
     return jsonResponse({
       ok: true,
@@ -477,61 +494,41 @@ function doPost(e) {
       var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
       if (!sheet) return jsonResponse({ ok: false, error: 'Transactions sheet not found' });
 
-      // Auto-migrate: Ensure Paid and Pending columns exist
-      var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-      var hasPaid = false;
-      var hasContact = false;
-      for (var c = 0; c < headers.length; c++) {
-        var hStr = String(headers[c] || '').toLowerCase();
-        if (hStr.indexOf('paid') >= 0) hasPaid = true;
-        if (hStr.indexOf('contact') >= 0) hasContact = true;
-      }
-
-      if (!hasPaid) {
-        addPaidAndPendingColumns();
-        sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
-        headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-      }
-
-      if (!hasContact) {
-        addContactNumberColumn();
-        sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
-        headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-      }
-
-      var colMap = {};
-      for (var h = 0; h < headers.length; h++) {
-        var key = String(headers[h] || '').toLowerCase().replace(/[^a-z]/g, '');
-        colMap[key] = h;
-      }
-
+      var colMap = ensureTransactionsColumns(sheet);
+      var lastCol = sheet.getLastColumn();
       var id = 'tx_' + new Date().getTime() + '_' + Math.floor(Math.random() * 1000);
-      var contactVal = payload.contactNumber ? String(payload.contactNumber).trim() : '';
-      if (contactVal && (contactVal.indexOf('+') === 0 || contactVal.indexOf('0') === 0)) {
+
+      var contactVal = payload.contactNumber !== undefined && payload.contactNumber !== null ? String(payload.contactNumber).trim() : '';
+      if (contactVal && contactVal.indexOf("'") !== 0) {
         contactVal = "'" + contactVal;
       }
 
       var amt = Number(payload.amount || 0);
-      var paidAmt = payload.paid !== undefined && payload.paid !== '' ? Number(payload.paid) : amt;
-      var pendingAmt = payload.pending !== undefined && payload.pending !== '' ? Number(payload.pending) : Math.max(0, amt - paidAmt);
+      var paidAmt = payload.paid !== undefined && payload.paid !== '' && payload.paid !== null ? Number(payload.paid) : amt;
+      var pendingAmt = payload.pending !== undefined && payload.pending !== '' && payload.pending !== null ? Number(payload.pending) : Math.max(0, amt - paidAmt);
 
-      var newRow = new Array(headers.length);
+      var newRow = new Array(lastCol);
       for (var k = 0; k < newRow.length; k++) newRow[k] = '';
 
-      if (colMap['id'] !== undefined) newRow[colMap['id']] = id;
-      if (colMap['date'] !== undefined) newRow[colMap['date']] = payload.date;
-      if (colMap['type'] !== undefined) newRow[colMap['type']] = String(payload.type).toLowerCase();
-      if (colMap['amount'] !== undefined) newRow[colMap['amount']] = amt;
-      if (colMap['paid'] !== undefined) newRow[colMap['paid']] = paidAmt;
-      if (colMap['pending'] !== undefined) newRow[colMap['pending']] = pendingAmt;
-      if (colMap['category'] !== undefined) newRow[colMap['category']] = payload.category || 'Uncategorized';
-      if (colMap['party'] !== undefined) newRow[colMap['party']] = payload.party || '';
-      if (colMap['contactnumber'] !== undefined) newRow[colMap['contactnumber']] = contactVal;
-      else if (colMap['contact'] !== undefined) newRow[colMap['contact']] = contactVal;
-      if (colMap['paymentmethod'] !== undefined) newRow[colMap['paymentmethod']] = payload.paymentMethod || 'Cash';
-      if (colMap['referencenumber'] !== undefined) newRow[colMap['referencenumber']] = payload.referenceNumber || '';
-      if (colMap['description'] !== undefined) newRow[colMap['description']] = payload.description || '';
-      if (colMap['createdat'] !== undefined) newRow[colMap['createdat']] = new Date().toISOString();
+      var setVal = function(name, val) {
+        var idx = colMap[name];
+        if (idx !== undefined && idx <= lastCol) newRow[idx - 1] = val;
+      };
+
+      setVal('id', id);
+      setVal('date', payload.date);
+      setVal('type', String(payload.type).toLowerCase());
+      setVal('amount', amt);
+      setVal('paid', paidAmt);
+      setVal('pending', pendingAmt);
+      setVal('category', payload.category || 'Uncategorized');
+      setVal('party', payload.party || '');
+      var cIdx = colMap['phonenumber'] || colMap['phone'] || colMap['contactnumber'] || colMap['contact'] || colMap['mobile'] || colMap['mobilenumber'];
+      if (cIdx && cIdx <= lastCol) newRow[cIdx - 1] = contactVal;
+      setVal('paymentmethod', payload.paymentMethod || 'Cash');
+      setVal('referencenumber', payload.referenceNumber || '');
+      setVal('description', payload.description || '');
+      setVal('createdat', new Date().toISOString());
 
       sheet.appendRow(newRow);
       return jsonResponse({ ok: true, id: id, message: 'Transaction recorded in Sheet' });
@@ -541,14 +538,9 @@ function doPost(e) {
       var sheet = ss.getSheetByName('Transactions') || ss.getActiveSheet();
       if (!sheet) return jsonResponse({ ok: false, error: 'Transactions sheet not found' });
 
-      var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-      var colMap = {};
-      for (var h = 0; h < headers.length; h++) {
-        var key = String(headers[h] || '').toLowerCase().replace(/[^a-z]/g, '');
-        colMap[key] = h + 1; // 1-based column index
-      }
-
+      var colMap = ensureTransactionsColumns(sheet);
       var data = sheet.getDataRange().getValues();
+
       for (var i = 1; i < data.length; i++) {
         if (String(data[i][0]) === String(payload.id)) {
           var rowNum = i + 1;
@@ -559,14 +551,16 @@ function doPost(e) {
           if (payload.pending !== undefined && colMap['pending']) sheet.getRange(rowNum, colMap['pending']).setValue(Number(payload.pending));
           if (payload.category && colMap['category']) sheet.getRange(rowNum, colMap['category']).setValue(payload.category);
           if (payload.party !== undefined && colMap['party']) sheet.getRange(rowNum, colMap['party']).setValue(payload.party);
-          if (payload.contactNumber !== undefined && (colMap['contactnumber'] || colMap['contact'])) {
-            var cCol = colMap['contactnumber'] || colMap['contact'];
-            var cVal = String(payload.contactNumber || '').trim();
-            if (cVal && (cVal.indexOf('+') === 0 || cVal.indexOf('0') === 0)) {
+
+          var cCol = colMap['phonenumber'] || colMap['phone'] || colMap['contactnumber'] || colMap['contact'] || colMap['mobile'] || colMap['mobilenumber'];
+          if (cCol && payload.contactNumber !== undefined) {
+            var cVal = payload.contactNumber !== null ? String(payload.contactNumber).trim() : '';
+            if (cVal && cVal.indexOf("'") !== 0) {
               cVal = "'" + cVal;
             }
-            sheet.getRange(rowNum, cCol).setValue(cVal);
+            sheet.getRange(rowNum, cCol).setNumberFormat('@').setValue(cVal);
           }
+
           if (payload.paymentMethod && colMap['paymentmethod']) sheet.getRange(rowNum, colMap['paymentmethod']).setValue(payload.paymentMethod);
           if (payload.referenceNumber !== undefined && colMap['referencenumber']) sheet.getRange(rowNum, colMap['referencenumber']).setValue(payload.referenceNumber);
           if (payload.description !== undefined && colMap['description']) sheet.getRange(rowNum, colMap['description']).setValue(payload.description);
@@ -668,6 +662,22 @@ function getTransactionsData(ss) {
     colMap[key] = h;
   }
 
+  // Auto-migrate columns if Paid, Pending, or ContactNumber are missing
+  if (colMap['paid'] === undefined || colMap['pending'] === undefined || (colMap['contactnumber'] === undefined && colMap['contact'] === undefined && colMap['phone'] === undefined)) {
+    try {
+      ensureTransactionsColumns(sheet);
+      rows = sheet.getDataRange().getValues();
+      headers = rows[0];
+      colMap = {};
+      for (var h = 0; h < headers.length; h++) {
+        var key = String(headers[h] || '').toLowerCase().replace(/[^a-z]/g, '');
+        colMap[key] = h;
+      }
+    } catch (e) {
+      // In case sheet execution permissions are read-only, proceed gracefully
+    }
+  }
+
   var transactions = [];
 
   for (var i = 1; i < rows.length; i++) {
@@ -691,7 +701,12 @@ function getTransactionsData(ss) {
     var pendingIdx = colMap['pending'] !== undefined ? colMap['pending'] : (colMap['pendingamount'] !== undefined ? colMap['pendingamount'] : -1);
     var catIdx = colMap['category'] !== undefined ? colMap['category'] : (paidIdx === -1 ? 4 : 6);
     var partyIdx = colMap['party'] !== undefined ? colMap['party'] : (paidIdx === -1 ? 5 : 7);
-    var contactIdx = colMap['contactnumber'] !== undefined ? colMap['contactnumber'] : (colMap['contact'] !== undefined ? colMap['contact'] : (colMap['phone'] !== undefined ? colMap['phone'] : -1));
+    var contactIdx = colMap['phonenumber'] !== undefined ? colMap['phonenumber'] :
+      (colMap['phone'] !== undefined ? colMap['phone'] :
+      (colMap['contactnumber'] !== undefined ? colMap['contactnumber'] :
+      (colMap['contact'] !== undefined ? colMap['contact'] :
+      (colMap['mobile'] !== undefined ? colMap['mobile'] :
+      (colMap['mobilenumber'] !== undefined ? colMap['mobilenumber'] : -1)))));
     var methodIdx = colMap['paymentmethod'] !== undefined ? colMap['paymentmethod'] : (contactIdx === -1 ? 6 : 7);
     var refIdx = colMap['referencenumber'] !== undefined ? colMap['referencenumber'] : (contactIdx === -1 ? 7 : 8);
     var descIdx = colMap['description'] !== undefined ? colMap['description'] : (contactIdx === -1 ? 8 : 9);

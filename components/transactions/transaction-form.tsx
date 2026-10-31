@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { ArrowDownLeft, ArrowUpRight, AlertCircle, Loader2 } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, AlertCircle, Loader2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,7 +23,22 @@ import {
 import { createTransaction, updateTransaction } from '@/app/actions/transactions'
 import { todayIso } from '@/lib/dates'
 import { PAYMENT_METHODS, type Category, type Transaction, type TxType } from '@/lib/types'
-import { paiseToDecimalString } from '@/lib/money'
+import { paiseToDecimalString, formatINR } from '@/lib/money'
+import { cn } from '@/lib/utils'
+
+function cleanNumericInput(val: string): string {
+  let sanitized = val.replace(/[^0-9.-]/g, '')
+  if (sanitized.startsWith('-')) {
+    sanitized = '-' + sanitized.slice(1).replace(/-/g, '')
+  } else {
+    sanitized = sanitized.replace(/-/g, '')
+  }
+  const parts = sanitized.split('.')
+  if (parts.length > 2) {
+    sanitized = parts[0] + '.' + parts.slice(1).join('')
+  }
+  return sanitized
+}
 
 interface TransactionFormProps {
   type: TxType
@@ -61,27 +76,43 @@ export function TransactionForm({
   const [description, setDescription] = useState(initialData?.description ?? '')
   const [referenceNumber, setReferenceNumber] = useState(initialData?.reference_number ?? '')
 
-  // Calculate pending amount in real-time
-  const totalNum = Number(amount) || 0
-  const effectivePaidStr = !isIncome ? (paidAmount === '' ? (hasManuallyEditedPaid ? '0' : amount) : paidAmount) : amount
-  const paidNum = Number(effectivePaidStr) || 0
+  // Calculate pending amount in real-time with clean numeric inputs
+  const cleanTotalStr = cleanNumericInput(amount)
+  const totalNum = parseFloat(cleanTotalStr) || 0
+
+  const cleanPaidStr = cleanNumericInput(paidAmount)
+  const effectivePaidStr = !isIncome
+    ? (cleanPaidStr === '' ? (hasManuallyEditedPaid ? '0' : cleanTotalStr) : cleanPaidStr)
+    : cleanTotalStr
+  const paidNum = parseFloat(effectivePaidStr) || 0
   const pendingNum = !isIncome ? Math.max(0, totalNum - paidNum) : 0
 
+  const paidPercent = totalNum > 0 ? Math.min(100, Math.max(0, Math.round((paidNum / totalNum) * 100))) : 0
+  const pendingPercent = totalNum > 0 ? Math.max(0, 100 - paidPercent) : 0
+
   function handleAmountChange(val: string) {
-    setAmount(val)
+    const cleaned = cleanNumericInput(val)
+    setAmount(cleaned)
     if (!hasManuallyEditedPaid && !isIncome) {
-      setPaidAmount(val)
+      setPaidAmount(cleaned)
     }
   }
 
   function handlePaidChange(val: string) {
+    const cleaned = cleanNumericInput(val)
     setHasManuallyEditedPaid(true)
-    setPaidAmount(val)
+    setPaidAmount(cleaned)
   }
 
   function setFullyPaid() {
     setHasManuallyEditedPaid(true)
-    setPaidAmount(amount || '0')
+    setPaidAmount(cleanNumericInput(amount) || '0')
+  }
+
+  function setHalfPaid() {
+    setHasManuallyEditedPaid(true)
+    const t = parseFloat(cleanNumericInput(amount)) || 0
+    setPaidAmount((t / 2).toFixed(2))
   }
 
   function setUnpaid() {
@@ -250,29 +281,36 @@ export function TransactionForm({
             </div>
           </FormField>
 
-          {/* Paid & Pending Section for Expenses */}
+          {/* Paid & Payment Method Section for Expenses */}
           {!isIncome && (
             <>
               {/* Paid Amount */}
               <FormField
                 id="paid_amount"
-                label="Paid (₹)"
+                label="Paid Amount (₹)"
                 required
                 error={fieldErrors.paid_amount}
                 hint={
-                  <span className="flex items-center gap-1.5 pt-1">
-                    <span>Quick:</span>
+                  <span className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] text-muted-foreground font-medium">Quick set:</span>
                     <button
                       type="button"
                       onClick={setFullyPaid}
-                      className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground hover:bg-muted/80 cursor-pointer border"
+                      className="rounded bg-muted px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/50 cursor-pointer border border-border"
                     >
                       Fully Paid
                     </button>
                     <button
                       type="button"
+                      onClick={setHalfPaid}
+                      className="rounded bg-muted px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-100/50 cursor-pointer border border-border"
+                    >
+                      50% / Half
+                    </button>
+                    <button
+                      type="button"
                       onClick={setUnpaid}
-                      className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-rose-600 hover:bg-muted/80 cursor-pointer border"
+                      className="rounded bg-muted px-2 py-0.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-100/50 cursor-pointer border border-border"
                     >
                       Unpaid / ₹0
                     </button>
@@ -288,41 +326,171 @@ export function TransactionForm({
                     placeholder="0.00"
                     value={paidAmount}
                     onChange={(e) => handlePaidChange(e.target.value)}
-                    className="h-10 pl-8 font-mono text-base font-medium"
+                    className="h-10 pl-8 font-mono text-base font-semibold"
                   />
                 </div>
               </FormField>
 
-              {/* Pending Amount (Live Calculated) */}
-              <div className="rounded-lg border bg-muted/40 p-3.5 flex flex-col justify-between space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Pending
-                  </span>
+              {/* Payment Method */}
+              <FormField
+                id="payment_method"
+                label="Payment Method"
+                required
+                error={fieldErrors.payment_method}
+              >
+                <SimpleSelect
+                  id="payment_method"
+                  options={paymentMethodOptions}
+                  value={paymentMethod}
+                  onValueChange={setPaymentMethod}
+                  placeholder="Select method…"
+                />
+              </FormField>
+
+              {/* HIGH-VISIBILITY PAYMENT BREAKDOWN & BALANCE IMPACT SHOWCASE CARD */}
+              <div className="sm:col-span-2 rounded-xl border border-border/80 bg-gradient-to-b from-card via-card to-muted/20 p-4 shadow-xs space-y-3.5">
+                <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Payment Breakdown & Balance Impact
+                    </span>
+                  </div>
                   {pendingNum <= 0 && totalNum > 0 ? (
-                    <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-950/50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
-                      Fully Paid
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-0.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                      <CheckCircle2 className="size-3.5" /> Fully Paid
                     </span>
                   ) : paidNum > 0 && pendingNum > 0 ? (
-                    <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-950/50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
-                      Partially Paid
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950/60 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                      <Clock className="size-3.5" /> Partially Paid
                     </span>
                   ) : (
-                    <span className="inline-flex items-center rounded-full bg-rose-100 dark:bg-rose-950/50 px-2 py-0.5 text-[11px] font-semibold text-rose-800 dark:text-rose-300">
-                      Unpaid / Due
+                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 dark:bg-rose-950/60 px-2.5 py-0.5 text-xs font-bold text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                      <AlertTriangle className="size-3.5" /> Unpaid / Due
                     </span>
                   )}
                 </div>
-                <div className="text-xl font-bold font-mono text-foreground">
-                  ₹{pendingNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+                {/* 3 Prominent Metric Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Total Expense */}
+                  <div className="rounded-lg border bg-background/80 p-3 flex flex-col justify-between shadow-2xs">
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Total Expense
+                    </span>
+                    <span className="text-xl font-extrabold font-mono text-foreground mt-1">
+                      ₹{totalNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground mt-0.5">
+                      Full incurred invoice/bill
+                    </span>
+                  </div>
+
+                  {/* Paid Amount */}
+                  <div className="rounded-lg border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/60 dark:bg-emerald-950/20 p-3 flex flex-col justify-between shadow-2xs">
+                    <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
+                      Paid (Cash Outflow)
+                    </span>
+                    <span className="text-xl font-extrabold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+                      ₹{paidNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[11px] text-emerald-800/80 dark:text-emerald-400/80 mt-0.5">
+                      Deducted from cash balance
+                    </span>
+                  </div>
+
+                  {/* Pending / Due */}
+                  <div
+                    className={cn(
+                      'rounded-lg border p-3 flex flex-col justify-between shadow-2xs',
+                      pendingNum > 0
+                        ? 'border-rose-300 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20'
+                        : 'border-emerald-200 dark:border-emerald-900/30 bg-emerald-50/30 dark:bg-emerald-950/10'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'text-[11px] font-semibold uppercase tracking-wider',
+                        pendingNum > 0 ? 'text-rose-800 dark:text-rose-300' : 'text-emerald-800 dark:text-emerald-300'
+                      )}
+                    >
+                      Pending / Due
+                    </span>
+                    <span
+                      className={cn(
+                        'text-xl font-extrabold font-mono mt-1',
+                        pendingNum > 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'
+                      )}
+                    >
+                      ₹{pendingNum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-[11px] mt-0.5',
+                        pendingNum > 0 ? 'text-rose-800/80 dark:text-rose-400/80' : 'text-muted-foreground'
+                      )}
+                    >
+                      {pendingNum > 0 ? 'Owed to vendor / Payable' : 'Zero balance due'}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-[11px] text-muted-foreground">
-                  {paidNum > 0
-                    ? `₹${paidNum.toFixed(2)} paid now; balance deducts ₹${paidNum.toFixed(2)}.`
-                    : '₹0 paid now; cash balance will not be deducted until paid.'}
+
+                {/* Visual Progress Split Bar */}
+                {totalNum > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className="text-emerald-700 dark:text-emerald-400">
+                        Paid: {paidPercent}% (₹{paidNum.toFixed(2)})
+                      </span>
+                      <span className={pendingNum > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground'}>
+                        Due: {pendingPercent}% (₹{pendingNum.toFixed(2)})
+                      </span>
+                    </div>
+                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted flex border">
+                      <div
+                        style={{ width: `${paidPercent}%` }}
+                        className="bg-emerald-600 transition-all duration-300"
+                        title={`Paid: ₹${paidNum.toFixed(2)} (${paidPercent}%)`}
+                      />
+                      <div
+                        style={{ width: `${pendingPercent}%` }}
+                        className="bg-rose-500 transition-all duration-300"
+                        title={`Pending: ₹${pendingNum.toFixed(2)} (${pendingPercent}%)`}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Explanatory Cash Balance Impact Note */}
+                <div className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground flex items-center gap-2 border border-border/40">
+                  <span className="text-base shrink-0">💡</span>
+                  <span>
+                    {pendingNum <= 0 && totalNum > 0
+                      ? `Fully Paid: ₹${totalNum.toFixed(2)} is subtracted from your Cash Balance immediately. Nothing is owed.`
+                      : paidNum > 0
+                        ? `Partial Payment: Only ₹${paidNum.toFixed(2)} is subtracted from your Cash Balance today. The remaining ₹${pendingNum.toFixed(2)} will stay recorded as Pending/Due.`
+                        : `Credit/Unpaid: ₹0.00 is deducted from your Cash Balance today. The full ₹${totalNum.toFixed(2)} remains Pending/Due until paid.`}
+                  </span>
                 </div>
               </div>
             </>
+          )}
+
+          {/* Payment Method for Income Only (for Expense it is shown next to Paid) */}
+          {isIncome && (
+            <FormField
+              id="payment_method"
+              label="Payment Method"
+              required
+              error={fieldErrors.payment_method}
+            >
+              <SimpleSelect
+                id="payment_method"
+                options={paymentMethodOptions}
+                value={paymentMethod}
+                onValueChange={setPaymentMethod}
+                placeholder="Select method…"
+              />
+            </FormField>
           )}
 
           {/* Category */}
@@ -375,22 +543,6 @@ export function TransactionForm({
               onChange={(e) => setContactNumber(e.target.value)}
               maxLength={30}
               className="h-10"
-            />
-          </FormField>
-
-          {/* Payment Method */}
-          <FormField
-            id="payment_method"
-            label="Payment Method"
-            required
-            error={fieldErrors.payment_method}
-          >
-            <SimpleSelect
-              id="payment_method"
-              options={paymentMethodOptions}
-              value={paymentMethod}
-              onValueChange={setPaymentMethod}
-              placeholder="Select method…"
             />
           </FormField>
 

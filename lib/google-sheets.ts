@@ -65,14 +65,22 @@ export async function postGoogleSheetsAction(payload: any) {
     const data = memoryCache.data
     if (payload.action === 'addTransaction') {
       const tempId = 'tx_' + now + '_' + Math.floor(Math.random() * 1000)
+      const amt = Number(payload.amount)
+      const isExpense = String(payload.type).toLowerCase() === 'expense'
+      const paid = payload.paid !== undefined ? Number(payload.paid) : amt
+      const pending = payload.pending !== undefined ? Number(payload.pending) : (isExpense ? Math.max(0, amt - paid) : 0)
+      const cleanContact = payload.contactNumber ? String(payload.contactNumber).replace(/^'/, '').trim() : null
+
       const newTx = {
         id: tempId,
         transaction_date: payload.date,
         type: String(payload.type).toLowerCase(),
-        amount: Number(payload.amount),
+        amount: amt,
+        paid: paid,
+        pending: pending,
         category_name: payload.category || 'Uncategorized',
         person_name: payload.party || null,
-        contact_number: payload.contactNumber || null,
+        contact_number: cleanContact,
         payment_method: payload.paymentMethod || 'Cash',
         reference_number: payload.referenceNumber || null,
         description: payload.description || null,
@@ -114,10 +122,10 @@ export async function postGoogleSheetsAction(payload: any) {
   const url = getGoogleSheetsScriptUrl()
   if (!url) return null
 
-  // Ensure phone numbers starting with + or 0 are treated as text by Google Sheets
+  // Ensure phone numbers are treated as plain text by Google Sheets
   if (payload.contactNumber && typeof payload.contactNumber === 'string') {
     const trimmed = payload.contactNumber.trim()
-    if ((trimmed.startsWith('+') || trimmed.startsWith('0')) && !trimmed.startsWith("'")) {
+    if (trimmed && !trimmed.startsWith("'")) {
       payload.contactNumber = `'${trimmed}`
     }
   }
