@@ -70,10 +70,42 @@ export function TransactionForm({
   )
   const [hasManuallyEditedPaid, setHasManuallyEditedPaid] = useState(Boolean(initialData))
   const [categoryId, setCategoryId] = useState(initialData?.category_id ?? '')
+
+  // Detect if selected category is "Other Expenses" or "Other Income"
+  const selectedCat = categories.find((c) => c.id === categoryId)
+  const isOtherCategory = Boolean(
+    selectedCat &&
+    (selectedCat.name.toLowerCase().includes('other') ||
+     selectedCat.id.toLowerCase().includes('other'))
+  )
+
+  const initialCat = categories.find((c) => c.id === initialData?.category_id)
+  const initialIsOther = Boolean(
+    initialCat &&
+    (initialCat.name.toLowerCase().includes('other') || initialCat.id.toLowerCase().includes('other'))
+  )
+
+  const [initialOtherDetail, initialNotes] = (() => {
+    if (!initialData?.description || !initialIsOther) {
+      return ['', initialData?.description ?? '']
+    }
+    const raw = initialData.description
+    if (raw.includes(' — ')) {
+      const [first, ...rest] = raw.split(' — ')
+      return [first.trim(), rest.join(' — ').trim()]
+    }
+    if (raw.includes(': ')) {
+      const [first, ...rest] = raw.split(': ')
+      return [first.trim(), rest.join(': ').trim()]
+    }
+    return [raw.trim(), '']
+  })()
+
+  const [otherDetail, setOtherDetail] = useState(initialOtherDetail)
   const [personName, setPersonName] = useState(initialData?.person_name ?? '')
   const [contactNumber, setContactNumber] = useState(initialData?.contact_number ?? '')
   const [paymentMethod, setPaymentMethod] = useState(initialData?.payment_method ?? 'upi')
-  const [description, setDescription] = useState(initialData?.description ?? '')
+  const [description, setDescription] = useState(initialNotes)
   const [referenceNumber, setReferenceNumber] = useState(initialData?.reference_number ?? '')
 
   // Calculate pending amount in real-time with clean numeric inputs
@@ -131,10 +163,11 @@ export function TransactionForm({
     amount !== (initialData ? paiseToDecimalString(initialData.amountPaise) : '') ||
     paidAmount !== (initialData ? paiseToDecimalString(initialData.paidPaise ?? initialData.amountPaise) : '') ||
     categoryId !== (initialData?.category_id ?? '') ||
+    otherDetail !== initialOtherDetail ||
     personName !== (initialData?.person_name ?? '') ||
     contactNumber !== (initialData?.contact_number ?? '') ||
     paymentMethod !== (initialData?.payment_method ?? 'upi') ||
-    description !== (initialData?.description ?? '') ||
+    description !== initialNotes ||
     referenceNumber !== (initialData?.reference_number ?? '')
 
   const categoryOptions = categories.map((c) => ({
@@ -173,6 +206,9 @@ export function TransactionForm({
       errors.paid_amount = 'Enter a valid paid amount'
     }
     if (!categoryId) errors.category_id = 'Please select a category'
+    if (isOtherCategory && !otherDetail.trim()) {
+      errors.other_detail = `Please specify what this ${isIncome ? 'other income' : 'other expense'} is for`
+    }
     if (!paymentMethod) errors.payment_method = 'Please select a payment method'
 
     if (Object.keys(errors).length > 0) {
@@ -183,6 +219,10 @@ export function TransactionForm({
     setIsSubmitting(true)
 
     try {
+      const finalDescription = isOtherCategory && otherDetail.trim()
+        ? (otherDetail.trim() + (description.trim() ? ` — ${description.trim()}` : ''))
+        : (description.trim() || null)
+
       const payload = {
         type,
         transaction_date: date,
@@ -193,7 +233,7 @@ export function TransactionForm({
         payment_method: paymentMethod,
         person_name: personName.trim() || null,
         contact_number: contactNumber.trim() || null,
-        description: description.trim() || null,
+        description: finalDescription,
         reference_number: referenceNumber.trim() || null,
       }
 
@@ -504,11 +544,56 @@ export function TransactionForm({
               id="category_id"
               options={categoryOptions}
               value={categoryId}
-              onValueChange={setCategoryId}
+              onValueChange={(val) => {
+                setCategoryId(val)
+                if (fieldErrors.category_id) {
+                  setFieldErrors((prev) => {
+                    const copy = { ...prev }
+                    delete copy.category_id
+                    return copy
+                  })
+                }
+              }}
               placeholder={`Select ${type} category…`}
               invalid={Boolean(fieldErrors.category_id)}
             />
           </FormField>
+
+          {/* Dedicated Field: When "Other Expenses" or "Other Income" is selected */}
+          {isOtherCategory && (
+            <div className="sm:col-span-2 rounded-xl border-2 border-primary/25 bg-primary/[0.04] p-3.5 space-y-1.5 transition-all shadow-2xs">
+              <FormField
+                id="other_detail"
+                label={`Specify ${isIncome ? 'Other Income Source / Item' : 'Other Expense Purpose / Item'} *`}
+                required
+                error={fieldErrors.other_detail}
+                hint={`Explain specifically what this ${isIncome ? 'income was received for' : 'expense was spent on'} for clear organization records`}
+              >
+                <Input
+                  id="other_detail"
+                  type="text"
+                  placeholder={
+                    isIncome
+                      ? 'e.g. Scrap sales, Old furniture sale, Event stall fee, Bank interest, Miscellaneous donation…'
+                      : 'e.g. Generator Fuel, Water filter servicing, Meeting snacks, Emergency courier, Repairs…'
+                  }
+                  value={otherDetail}
+                  onChange={(e) => {
+                    setOtherDetail(e.target.value)
+                    if (fieldErrors.other_detail) {
+                      setFieldErrors((prev) => {
+                        const copy = { ...prev }
+                        delete copy.other_detail
+                        return copy
+                      })
+                    }
+                  }}
+                  maxLength={100}
+                  className="h-10 border-primary/30 font-semibold focus-visible:border-primary text-sm bg-background"
+                />
+              </FormField>
+            </div>
+          )}
 
           {/* Received from / Paid to */}
           <FormField

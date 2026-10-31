@@ -572,7 +572,16 @@ export function TransactionsTable({
 
                       {/* Category */}
                       <TableCell className="text-xs">
-                        <span className="font-medium text-foreground">{tx.category_name}</span>
+                        <span className="font-semibold text-foreground">{tx.category_name}</span>
+                        {(() => {
+                          if (!tx.category_name.toLowerCase().includes('other') || !tx.description) return null
+                          const [purpose] = tx.description.includes(' — ') ? tx.description.split(' — ') : [tx.description]
+                          return (
+                            <span className="mt-0.5 block font-semibold text-primary text-[11px]">
+                              ↳ {purpose}
+                            </span>
+                          )
+                        })()}
                       </TableCell>
 
                       {/* Party / Vendor & Notes */}
@@ -585,7 +594,14 @@ export function TransactionsTable({
                             className="mt-0.5 max-w-[200px] truncate text-[11px] text-muted-foreground"
                             title={tx.description}
                           >
-                            {tx.description}
+                            {(() => {
+                              if (tx.category_name.toLowerCase().includes('other')) {
+                                return tx.description.includes(' — ')
+                                  ? tx.description.split(' — ').slice(1).join(' — ')
+                                  : null
+                              }
+                              return tx.description
+                            })()}
                           </div>
                         )}
                         {tx.reference_number && (

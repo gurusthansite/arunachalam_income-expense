@@ -95,7 +95,18 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
                           {isIncome ? 'Income' : 'Expense'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs font-medium">{tx.category_name}</TableCell>
+                      <TableCell className="text-xs">
+                        <span className="font-semibold text-foreground">{tx.category_name}</span>
+                        {(() => {
+                          if (!tx.category_name.toLowerCase().includes('other') || !tx.description) return null
+                          const [purpose] = tx.description.includes(' — ') ? tx.description.split(' — ') : [tx.description]
+                          return (
+                            <span className="mt-0.5 block font-semibold text-primary text-[10px]">
+                              ↳ {purpose}
+                            </span>
+                          )
+                        })()}
+                      </TableCell>
                       <TableCell className="text-xs">
                         <span className="text-foreground font-semibold block">{tx.person_name || '—'}</span>
                         {tx.contact_number && (
