@@ -1,4 +1,4 @@
-import { FileSpreadsheet, ExternalLink, Download } from 'lucide-react'
+import { Download, Lock } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -13,15 +13,28 @@ export function UserFooter({ email, role }: { email: string; role: string }) {
           </p>
           <p className="text-[10px] text-muted-foreground truncate">Synced via Apps Script</p>
         </div>
-        <a
-          href="/api/ledger/download"
-          download
-          title="Download raw Excel backup"
-          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-7 text-[11px] px-2 gap-1 shrink-0')}
-        >
-          <Download className="size-3" />
-          <span>XLSX</span>
-        </a>
+        <div className="flex items-center gap-1 shrink-0">
+          <a
+            href="/api/ledger/download"
+            download
+            title="Download raw Excel backup"
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-7 text-[11px] px-2 gap-1')}
+          >
+            <Download className="size-3" />
+            <span>XLSX</span>
+          </a>
+          <a
+            href="/auth/signout"
+            title="Lock application and sign out"
+            className={cn(
+              buttonVariants({ variant: 'ghost', size: 'sm' }),
+              'h-7 w-7 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive'
+            )}
+          >
+            <Lock className="size-3.5" />
+            <span className="sr-only">Lock</span>
+          </a>
+        </div>
       </div>
     </div>
   )

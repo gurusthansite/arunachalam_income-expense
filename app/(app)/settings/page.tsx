@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Building2, Tags, FileSpreadsheet, History } from 'lucide-react'
+import { Building2, Tags, FileSpreadsheet, History, ShieldCheck } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/page-header'
@@ -7,6 +7,7 @@ import { OrgDetailsForm } from '@/components/settings/org-details-form'
 import { CategoriesManager } from '@/components/settings/categories-manager'
 import { ExcelFileManager } from '@/components/settings/excel-file-manager'
 import { AuditLogTable } from '@/components/settings/audit-log-table'
+import { SecuritySettings } from '@/components/settings/security-settings'
 import { getAuditLog, getCategoriesWithUsage, getSettings, getTransactions } from '@/lib/data'
 
 export const metadata: Metadata = {
@@ -36,7 +37,7 @@ export default async function SettingsPage({ searchParams }: PageProps) {
     <div className="space-y-6">
       <PageHeader
         title="Settings & Configuration"
-        description="Configure organization profile, opening balance, categories, and direct Excel file storage"
+        description="Configure organization profile, opening balance, categories, password protection, and direct Excel file storage"
       />
 
       <Tabs defaultValue={defaultTab} className="space-y-6">
@@ -48,6 +49,10 @@ export default async function SettingsPage({ searchParams }: PageProps) {
           <TabsTrigger value="categories" className="gap-1.5 text-xs">
             <Tags className="size-3.5" />
             <span>Categories</span>
+          </TabsTrigger>
+          <TabsTrigger value="security" className="gap-1.5 text-xs">
+            <ShieldCheck className="size-3.5 text-primary" />
+            <span>Access & Security</span>
           </TabsTrigger>
           <TabsTrigger value="excel" className="gap-1.5 text-xs">
             <FileSpreadsheet className="size-3.5 text-emerald-600" />
@@ -89,7 +94,22 @@ export default async function SettingsPage({ searchParams }: PageProps) {
           </Card>
         </TabsContent>
 
-        {/* Tab 3: Excel File Management */}
+        {/* Tab 3: Access & Security */}
+        <TabsContent value="security">
+          <Card className="shadow-xs">
+            <CardHeader className="border-b pb-4">
+              <CardTitle className="text-base">Password & Access Protection</CardTitle>
+              <CardDescription className="text-xs">
+                Manage access passwords and security settings to protect this application from unauthorized visitors.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <SecuritySettings />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 4: Excel File Management */}
         <TabsContent value="excel">
           <Card className="shadow-xs">
             <CardHeader className="border-b pb-4">
