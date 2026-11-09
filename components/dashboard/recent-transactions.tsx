@@ -136,11 +136,11 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
                               </span>
                             ) : isPartial ? (
                               <span className="inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-amber-800 dark:text-amber-300">
-                                ₹{formatINR(pending)} Due
+                                {formatINR(pending)} Due
                               </span>
                             ) : (
                               <span className="inline-flex items-center rounded bg-rose-500/15 px-1.5 py-0.2 text-[10px] font-bold text-rose-800 dark:text-rose-300">
-                                ⚠️ ₹{formatINR(pending)} Unpaid
+                                ⚠️ {formatINR(pending)} Unpaid
                               </span>
                             )}
                           </div>

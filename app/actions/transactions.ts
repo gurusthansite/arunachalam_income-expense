@@ -4,8 +4,11 @@ import { revalidatePath } from 'next/cache'
 import * as excelStorage from '@/lib/excel-storage'
 import { getGoogleSheetsScriptUrl, postGoogleSheetsAction, invalidateGoogleSheetsCache } from '@/lib/google-sheets'
 import { flattenErrors, transactionSchema, type TransactionInput } from '@/lib/validation'
-import { getCategories } from '@/lib/data'
-import type { ActionResult } from '@/lib/types'
+import { getCategories, getTransactions } from '@/lib/data'
+import type { ActionResult, PaymentInstallment, Transaction } from '@/lib/types'
+import { getTxPaidPaise, getTxPendingPaise } from '@/lib/types'
+import { toPaise, paiseToDecimalString, formatINR } from '@/lib/money'
+import { encodePayments, decodePayments, cleanDescription, getConsolidatedMethod } from '@/lib/installments'
 
 async function validateCategory(
   categoryId: string,
@@ -188,5 +191,135 @@ export async function deleteTransaction(id: string): Promise<ActionResult> {
   } catch (error: any) {
     console.error('[transactions] delete failed', error.message)
     return { ok: false, error: error.message || 'Could not delete the transaction.' }
+  }
+}
+
+export interface RecordInstallmentInput {
+  transactionId: string
+  amount: string
+  paymentDate: string
+  paymentMethod: string
+  referenceNumber?: string | null
+  note?: string | null
+}
+
+export async function recordInstallmentPayment(input: RecordInstallmentInput): Promise<ActionResult> {
+  if (!input.transactionId) {
+    return { ok: false, error: 'Transaction ID is required.' }
+  }
+  const amtNum = parseFloat(input.amount)
+  if (isNaN(amtNum) || amtNum <= 0) {
+    return { ok: false, error: 'Please enter a valid payment amount greater than zero.' }
+  }
+  if (!input.paymentDate) {
+    return { ok: false, error: 'Payment date is required.' }
+  }
+  if (!input.paymentMethod) {
+    return { ok: false, error: 'Payment method is required.' }
+  }
+
+  try {
+    // 1. Fetch current transaction record
+    const { rows: allTx } = await getTransactions({ pageSize: 1000, page: 1, sort: 'date', dir: 'desc' })
+    const targetTx = allTx.find((t) => t.id === input.transactionId)
+    if (!targetTx) {
+      return { ok: false, error: 'Transaction record not found.' }
+    }
+
+    const currentPendingPaise = getTxPendingPaise(targetTx)
+    const newPaymentPaise = toPaise(input.amount)
+
+    if (currentPendingPaise <= 0) {
+      return { ok: false, error: 'This transaction is already fully paid.' }
+    }
+
+    if (newPaymentPaise > currentPendingPaise) {
+      return {
+        ok: false,
+        error: `Payment amount (${formatINR(newPaymentPaise)}) exceeds remaining balance of ${formatINR(currentPendingPaise)}.`,
+      }
+    }
+
+    // 2. Decode existing payment installments or synthesize installment #1 from initial advance
+    const existingInstallments = decodePayments(targetTx.description, targetTx)
+    const newInstallmentNumber = existingInstallments.length + 1
+
+    const newInstallment: PaymentInstallment = {
+      installmentNumber: newInstallmentNumber,
+      amountPaise: newPaymentPaise,
+      date: input.paymentDate,
+      paymentMethod: input.paymentMethod,
+      referenceNumber: input.referenceNumber ? input.referenceNumber.trim() : null,
+      note: input.note ? input.note.trim() : null,
+      createdAt: new Date().toISOString(),
+    }
+
+    const updatedInstallments = [...existingInstallments, newInstallment]
+    const currentPaidPaise = getTxPaidPaise(targetTx)
+    const updatedPaidPaise = currentPaidPaise + newPaymentPaise
+    const updatedPendingPaise = Math.max(0, targetTx.amountPaise - updatedPaidPaise)
+
+    // Compute consolidated payment method (e.g. "Cash + UPI")
+    const consolidatedMethod = getConsolidatedMethod(updatedInstallments, targetTx.payment_method)
+
+    // Preserve user clean notes and encode the full payment history
+    const baseNotes = cleanDescription(targetTx.description)
+    const updatedDescription = encodePayments(baseNotes, updatedInstallments)
+
+    // 3. Update in Google Sheets
+    if (getGoogleSheetsScriptUrl()) {
+      const gRes = await postGoogleSheetsAction({
+        action: 'updateTransaction',
+        id: targetTx.id,
+        date: targetTx.transaction_date, // Keep original bill date
+        type: targetTx.type,
+        amount: paiseToDecimalString(targetTx.amountPaise),
+        paid: paiseToDecimalString(updatedPaidPaise),
+        pending: paiseToDecimalString(updatedPendingPaise),
+        category: targetTx.category_name,
+        party: targetTx.person_name || '',
+        contactNumber: targetTx.contact_number || '',
+        paymentMethod: consolidatedMethod,
+        referenceNumber: targetTx.reference_number || (input.referenceNumber || ''),
+        description: updatedDescription,
+      })
+      if (gRes && !gRes.ok) {
+        throw new Error(gRes.error || 'Failed to update Google Sheets')
+      }
+    }
+
+    // 4. Update in local Excel storage
+    try {
+      await excelStorage.updateTransaction(targetTx.id, {
+        type: targetTx.type,
+        transaction_date: targetTx.transaction_date,
+        amount: paiseToDecimalString(targetTx.amountPaise),
+        paid_amount: paiseToDecimalString(updatedPaidPaise),
+        pending_amount: paiseToDecimalString(updatedPendingPaise),
+        category_id: targetTx.category_id,
+        payment_method: consolidatedMethod,
+        person_name: targetTx.person_name,
+        contact_number: targetTx.contact_number,
+        description: updatedDescription,
+        reference_number: targetTx.reference_number || input.referenceNumber,
+      })
+    } catch (excelErr: any) {
+      console.warn('[excel-storage] local file update skipped:', excelErr.message)
+    }
+
+    // 5. Invalidate cache and refresh
+    invalidateGoogleSheetsCache()
+    revalidatePath('/', 'layout')
+
+    const isFullyCleared = updatedPendingPaise === 0
+    return {
+      ok: true,
+      message: isFullyCleared
+        ? `Payment of ${formatINR(newPaymentPaise)} recorded! Bill is now fully settled.`
+        : `Payment of ${formatINR(newPaymentPaise)} recorded! Remaining due: ${formatINR(updatedPendingPaise)}.`,
+    }
+  } catch (error: any) {
+    console.error('[transactions] record installment failed:', error.message)
+    return { ok: false, error: error.message || 'Could not record installment payment.' }
   }
 }

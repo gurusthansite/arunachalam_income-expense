@@ -23,6 +23,16 @@ export type Category = {
 
 export type CategoryWithUsage = Category & { usage_count: number }
 
+export type PaymentInstallment = {
+  installmentNumber: number
+  amountPaise: number
+  date: string
+  paymentMethod: string
+  referenceNumber?: string | null
+  note?: string | null
+  createdAt?: string
+}
+
 /** Transaction with amount already converted to integer paise. */
 export type Transaction = {
   id: string
@@ -38,6 +48,7 @@ export type Transaction = {
   payment_method: string
   description: string | null
   reference_number: string | null
+  payment_history?: PaymentInstallment[]
 }
 
 export function getTxPaidPaise(tx: Transaction): number {

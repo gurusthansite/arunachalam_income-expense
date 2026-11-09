@@ -17,6 +17,7 @@ import type {
   TxType,
 } from '@/lib/types'
 import { PAYMENT_METHODS, paymentMethodLabel, getTxPaidPaise, getTxPendingPaise, getTxPaymentStatus } from '@/lib/types'
+import { decodePayments, cleanDescription } from '@/lib/installments'
 
 export type { AuditEntry } from '@/lib/excel-storage'
 
@@ -111,7 +112,7 @@ function mapGTransactions(rawList: any[]): Transaction[] {
       }
     }
 
-    return {
+    const txObj: Transaction = {
       id: String(t.id),
       transaction_date: normalizeDate(t.transaction_date),
       type: String(t.type || 'expense').toLowerCase() as TxType,
@@ -124,8 +125,10 @@ function mapGTransactions(rawList: any[]): Transaction[] {
       contact_number: contact,
       payment_method: paymentMethod,
       reference_number: t.reference_number ? String(t.reference_number) : null,
-      description: t.description ? String(t.description) : null,
+      description: cleanDescription(t.description),
     }
+    txObj.payment_history = decodePayments(t.description, txObj)
+    return txObj
   })
 }
 

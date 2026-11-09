@@ -23,6 +23,8 @@ import {
   TrendingUp,
   TrendingDown,
   AlertTriangle,
+  History,
+  CreditCard,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -55,6 +57,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { TransactionForm } from '@/components/transactions/transaction-form'
+import { SettleDueDialog } from '@/components/transactions/settle-due-dialog'
+import { PaymentHistoryDialog } from '@/components/transactions/payment-history-dialog'
 import { deleteTransaction } from '@/app/actions/transactions'
 import { formatDate } from '@/lib/dates'
 import { formatINR } from '@/lib/money'
@@ -125,6 +129,8 @@ export function TransactionsTable({
   const [searchInput, setSearchInput] = useState(currentFilters.q)
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null)
+  const [settlingTx, setSettlingTx] = useState<Transaction | null>(null)
+  const [historyTx, setHistoryTx] = useState<Transaction | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
@@ -640,7 +646,20 @@ export function TransactionsTable({
 
                       {/* Payment Method */}
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {paymentMethodLabel(tx.payment_method)}
+                        <div className="font-medium text-foreground">
+                          {paymentMethodLabel(tx.payment_method)}
+                        </div>
+                        {Boolean(tx.payment_history && tx.payment_history.length > 0) && (
+                          <button
+                            type="button"
+                            onClick={() => setHistoryTx(tx)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-primary hover:underline mt-0.5 bg-primary/10 px-1.5 py-0.2 rounded"
+                            title="Click to view full payment audit trail"
+                          >
+                            <History className="size-2.5" />
+                            <span>{tx.payment_history!.length} {tx.payment_history!.length === 1 ? 'Payment' : 'Installments'}</span>
+                          </button>
+                        )}
                       </TableCell>
 
                       {/* Total Amount / Total Bill */}
@@ -651,7 +670,7 @@ export function TransactionsTable({
                             : 'text-foreground'
                         }`}
                       >
-                        {isIncome ? `+₹${formatINR(Math.abs(tx.amountPaise))}` : `₹${formatINR(Math.abs(tx.amountPaise))}`}
+                        {isIncome ? `+${formatINR(Math.abs(tx.amountPaise))}` : formatINR(Math.abs(tx.amountPaise))}
                       </TableCell>
 
                       {/* Payment Breakdown (Paid vs Pending) */}
@@ -665,7 +684,7 @@ export function TransactionsTable({
                               <CheckCircle2 className="mr-1 size-2.5" /> Received
                             </Badge>
                             <span className="mt-0.5 font-mono text-[11px] text-emerald-700 dark:text-emerald-400">
-                              +₹{formatINR(paidPaise)}
+                              +{formatINR(paidPaise)}
                             </span>
                           </div>
                         ) : isFullyPaid ? (
@@ -677,17 +696,30 @@ export function TransactionsTable({
                               <CheckCircle2 className="mr-1 size-2.5 text-emerald-600" /> Fully Settled
                             </Badge>
                             <span className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                              -₹{formatINR(paidPaise)} paid
+                              -{formatINR(paidPaise)} paid
                             </span>
                           </div>
                         ) : isPartial ? (
                           <div className="flex flex-col items-end">
-                            <Badge
-                              variant="outline"
-                              className="border-amber-500/30 bg-amber-500/10 text-[10px] font-semibold text-amber-800 dark:text-amber-300"
-                            >
-                              <Clock className="mr-1 size-2.5 text-amber-600" /> ₹{formatINR(pendingPaise)} Due
-                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500/30 bg-amber-500/10 text-[10px] font-semibold text-amber-800 dark:text-amber-300"
+                              >
+                                <Clock className="mr-1 size-2.5 text-amber-600" /> {formatINR(pendingPaise)} Due
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSettlingTx(tx)}
+                                className="h-5 px-1.5 text-[10px] gap-1 bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 font-bold transition-all shadow-2xs"
+                                title="Record payment without losing past history"
+                              >
+                                <CreditCard className="size-2.5" />
+                                <span>Pay Due</span>
+                              </Button>
+                            </div>
                             {/* Two-tone Mini Progress Bar */}
                             <div className="mt-1 flex h-1.5 w-24 overflow-hidden rounded-full bg-amber-500/20">
                               <div
@@ -702,18 +734,31 @@ export function TransactionsTable({
                               />
                             </div>
                             <span className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                              ₹{formatINR(paidPaise)} paid ({paidPercent}%)
+                              {formatINR(paidPaise)} paid ({paidPercent}%)
                             </span>
                           </div>
                         ) : (
                           /* Fully Unpaid */
                           <div className="flex flex-col items-end">
-                            <Badge
-                              variant="outline"
-                              className="border-rose-500/35 bg-rose-500/15 text-[10px] font-bold text-rose-800 dark:text-rose-300 animate-pulse"
-                            >
-                              <AlertCircle className="mr-1 size-2.5 text-rose-600 dark:text-rose-400" /> ₹{formatINR(pendingPaise)} Unpaid
-                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              <Badge
+                                variant="outline"
+                                className="border-rose-500/35 bg-rose-500/15 text-[10px] font-bold text-rose-800 dark:text-rose-300 animate-pulse"
+                              >
+                                <AlertCircle className="mr-1 size-2.5 text-rose-600 dark:text-rose-400" /> {formatINR(pendingPaise)} Unpaid
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSettlingTx(tx)}
+                                className="h-5 px-1.5 text-[10px] gap-1 bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 font-bold transition-all shadow-2xs"
+                                title="Record payment without losing past history"
+                              >
+                                <CreditCard className="size-2.5" />
+                                <span>Pay Due</span>
+                              </Button>
+                            </div>
                             {/* 100% Unpaid Progress Bar */}
                             <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-rose-500/20">
                               <div className="h-full w-full bg-rose-500" />
@@ -848,6 +893,24 @@ export function TransactionsTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Settle Due / Record Installment Dialog */}
+      <SettleDueDialog
+        transaction={settlingTx}
+        open={Boolean(settlingTx)}
+        onOpenChange={(open) => !open && setSettlingTx(null)}
+        onSuccess={() => {
+          setSettlingTx(null)
+          router.refresh()
+        }}
+      />
+
+      {/* Payment History Audit Trail Dialog */}
+      <PaymentHistoryDialog
+        transaction={historyTx}
+        open={Boolean(historyTx)}
+        onOpenChange={(open) => !open && setHistoryTx(null)}
+      />
     </div>
   )
 }
