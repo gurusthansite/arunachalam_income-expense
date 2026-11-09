@@ -595,6 +595,21 @@ export function TransactionsTable({
                         <div className="font-semibold text-foreground">
                           {tx.person_name || <span className="font-normal text-muted-foreground/60">—</span>}
                         </div>
+                        {isIncome && tx.referred_by && (
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-primary font-medium">
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground">Ref:</span>
+                            <span>{tx.referred_by}</span>
+                            {tx.referred_contact && (
+                              <span className="text-muted-foreground font-mono text-[10px]">({tx.referred_contact})</span>
+                            )}
+                          </div>
+                        )}
+                        {!isIncome && tx.paid_by && (
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground">Paid by:</span>
+                            <span>{tx.paid_by}</span>
+                          </div>
+                        )}
                         {tx.description && (
                           <div
                             className="mt-0.5 max-w-[200px] truncate text-[11px] text-muted-foreground"

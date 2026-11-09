@@ -17,7 +17,7 @@ import type {
   TxType,
 } from '@/lib/types'
 import { PAYMENT_METHODS, paymentMethodLabel, getTxPaidPaise, getTxPendingPaise, getTxPaymentStatus } from '@/lib/types'
-import { decodePayments, cleanDescription } from '@/lib/installments'
+import { decodePayments, cleanDescription, decodeTransactionMetadata } from '@/lib/installments'
 
 export type { AuditEntry } from '@/lib/excel-storage'
 
@@ -112,6 +112,9 @@ function mapGTransactions(rawList: any[]): Transaction[] {
       }
     }
 
+    const rawDesc = t.description ? String(t.description) : null
+    const meta = decodeTransactionMetadata(rawDesc)
+
     const txObj: Transaction = {
       id: String(t.id),
       transaction_date: normalizeDate(t.transaction_date),
@@ -125,9 +128,13 @@ function mapGTransactions(rawList: any[]): Transaction[] {
       contact_number: contact,
       payment_method: paymentMethod,
       reference_number: t.reference_number ? String(t.reference_number) : null,
-      description: cleanDescription(t.description),
+      description: cleanDescription(rawDesc),
+      raw_description: rawDesc,
+      referred_by: meta.referred_by || null,
+      referred_contact: meta.referred_contact || null,
+      paid_by: meta.paid_by || null,
     }
-    txObj.payment_history = decodePayments(t.description, txObj)
+    txObj.payment_history = decodePayments(rawDesc, txObj)
     return txObj
   })
 }

@@ -58,6 +58,7 @@ export function SettleDueDialog({
   const [date, setDate] = useState(todayIso())
   const [method, setMethod] = useState('upi')
   const [referenceNumber, setReferenceNumber] = useState('')
+  const [paidBy, setPaidBy] = useState(transaction?.paid_by || '')
   const [note, setNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,6 +69,7 @@ export function SettleDueDialog({
       setDate(todayIso())
       setMethod('upi')
       setReferenceNumber('')
+      setPaidBy(transaction.paid_by || '')
       setNote('')
       setError(null)
     }
@@ -82,6 +84,7 @@ export function SettleDueDialog({
       setDate(todayIso())
       setMethod('upi')
       setReferenceNumber('')
+      setPaidBy(transaction.paid_by || '')
       setNote('')
       setError(null)
     }
@@ -117,6 +120,7 @@ export function SettleDueDialog({
         paymentMethod: method,
         referenceNumber: referenceNumber.trim() || null,
         note: note.trim() || null,
+        paidBy: paidBy.trim() || null,
       })
 
       if (!res.ok) {
@@ -268,18 +272,33 @@ export function SettleDueDialog({
             </div>
           </div>
 
-          {/* Reference # */}
-          <div className="space-y-1.5">
-            <Label htmlFor="reference_number" className="text-xs font-semibold">
-              Reference / Transaction ID <span className="text-muted-foreground font-normal">(Optional)</span>
-            </Label>
-            <Input
-              id="reference_number"
-              value={referenceNumber}
-              onChange={(e) => setReferenceNumber(e.target.value)}
-              placeholder="e.g. UPI Ref / GPay / Cheque #"
-              className="h-9 text-xs font-mono"
-            />
+          {/* Reference # and Payment By */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="reference_number" className="text-xs font-semibold">
+                Ref / Trans ID <span className="text-muted-foreground font-normal">(Optional)</span>
+              </Label>
+              <Input
+                id="reference_number"
+                value={referenceNumber}
+                onChange={(e) => setReferenceNumber(e.target.value)}
+                placeholder="e.g. UPI Ref / Cheque #"
+                className="h-9 text-xs font-mono"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="settle_paid_by" className="text-xs font-semibold">
+                Payment By <span className="text-muted-foreground font-normal">(Optional)</span>
+              </Label>
+              <Input
+                id="settle_paid_by"
+                value={paidBy}
+                onChange={(e) => setPaidBy(e.target.value)}
+                placeholder="e.g. Lohith / Trustee"
+                className="h-9 text-xs"
+              />
+            </div>
           </div>
 
           {/* Note / Memo */}

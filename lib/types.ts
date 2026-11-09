@@ -30,6 +30,8 @@ export type PaymentInstallment = {
   paymentMethod: string
   referenceNumber?: string | null
   note?: string | null
+  paidBy?: string | null
+  paid_by?: string | null
   createdAt?: string
 }
 
@@ -47,8 +49,12 @@ export type Transaction = {
   contact_number?: string | null
   payment_method: string
   description: string | null
+  raw_description?: string | null
   reference_number: string | null
   payment_history?: PaymentInstallment[]
+  referred_by?: string | null
+  referred_contact?: string | null
+  paid_by?: string | null
 }
 
 export function getTxPaidPaise(tx: Transaction): number {

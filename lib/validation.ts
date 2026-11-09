@@ -45,6 +45,9 @@ export const transactionSchema = z.object({
   contact_number: optionalText(30),
   description: optionalText(500),
   reference_number: optionalText(60),
+  referred_by: optionalText(120),
+  referred_contact: optionalText(30),
+  paid_by: optionalText(120),
 })
 
 export type TransactionInput = z.input<typeof transactionSchema>

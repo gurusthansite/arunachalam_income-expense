@@ -8,7 +8,7 @@ import { getCategories, getTransactions } from '@/lib/data'
 import type { ActionResult, PaymentInstallment, Transaction } from '@/lib/types'
 import { getTxPaidPaise, getTxPendingPaise } from '@/lib/types'
 import { toPaise, paiseToDecimalString, formatINR } from '@/lib/money'
-import { encodePayments, decodePayments, cleanDescription, getConsolidatedMethod } from '@/lib/installments'
+import { encodePayments, decodePayments, cleanDescription, getConsolidatedMethod, encodeFullDescription } from '@/lib/installments'
 
 async function validateCategory(
   categoryId: string,
@@ -42,6 +42,35 @@ export async function createTransaction(input: TransactionInput): Promise<Action
       ? values.pending_amount
       : String(Math.max(0, Number(values.amount) - Number(paidVal)))
 
+  const isExpense = values.type === 'expense'
+  const metadata = {
+    referred_by: values.referred_by || null,
+    referred_contact: values.referred_contact || null,
+    paid_by: values.paid_by || null,
+  }
+
+  let initialInstallments: PaymentInstallment[] | undefined
+  if (isExpense && Number(paidVal) > 0) {
+    initialInstallments = [
+      {
+        installmentNumber: 1,
+        amountPaise: toPaise(paidVal),
+        date: values.transaction_date,
+        paymentMethod: values.payment_method,
+        referenceNumber: values.reference_number || null,
+        paidBy: values.paid_by || null,
+        note: Number(pendingVal) > 0 ? 'Initial / Advance Payment' : 'Full Payment',
+        createdAt: new Date().toISOString(),
+      },
+    ]
+  }
+
+  const fullDescription = encodeFullDescription({
+    cleanNotes: values.description,
+    metadata,
+    payments: initialInstallments,
+  })
+
   try {
     // 1. Save to Google Sheets if connected
     if (getGoogleSheetsScriptUrl()) {
@@ -57,7 +86,7 @@ export async function createTransaction(input: TransactionInput): Promise<Action
         contactNumber: values.contact_number || '',
         paymentMethod: values.payment_method,
         referenceNumber: values.reference_number || '',
-        description: values.description || '',
+        description: fullDescription,
       })
       if (gRes && !gRes.ok) {
         throw new Error(gRes.error || 'Failed to save to Google Sheets')
@@ -76,7 +105,7 @@ export async function createTransaction(input: TransactionInput): Promise<Action
         payment_method: values.payment_method,
         person_name: values.person_name,
         contact_number: values.contact_number,
-        description: values.description,
+        description: fullDescription,
         reference_number: values.reference_number,
       })
     } catch (excelErr: any) {
@@ -114,6 +143,25 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
       : String(Math.max(0, Number(values.amount) - Number(paidVal)))
 
   try {
+    // Preserve existing payment history and metadata
+    const { rows: allTx } = await getTransactions({ pageSize: 1000, page: 1, sort: 'date', dir: 'desc' })
+    const targetTx = allTx.find((t) => t.id === id)
+    const existingInstallments =
+      targetTx?.payment_history ||
+      (targetTx ? decodePayments(targetTx.raw_description || targetTx.description, targetTx) : [])
+
+    const metadata = {
+      referred_by: values.referred_by !== undefined ? values.referred_by : (targetTx?.referred_by || null),
+      referred_contact: values.referred_contact !== undefined ? values.referred_contact : (targetTx?.referred_contact || null),
+      paid_by: values.paid_by !== undefined ? values.paid_by : (targetTx?.paid_by || null),
+    }
+
+    const fullDescription = encodeFullDescription({
+      cleanNotes: values.description,
+      metadata,
+      payments: existingInstallments.length > 0 ? existingInstallments : undefined,
+    })
+
     if (getGoogleSheetsScriptUrl()) {
       const gRes = await postGoogleSheetsAction({
         action: 'updateTransaction',
@@ -128,7 +176,7 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
         contactNumber: values.contact_number || '',
         paymentMethod: values.payment_method,
         referenceNumber: values.reference_number || '',
-        description: values.description || '',
+        description: fullDescription,
       })
       if (gRes && !gRes.ok) {
         throw new Error(gRes.error || 'Failed to update in Google Sheets')
@@ -146,7 +194,7 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
         payment_method: values.payment_method,
         person_name: values.person_name,
         contact_number: values.contact_number,
-        description: values.description,
+        description: fullDescription,
         reference_number: values.reference_number,
       })
     } catch (excelErr: any) {
@@ -201,6 +249,7 @@ export interface RecordInstallmentInput {
   paymentMethod: string
   referenceNumber?: string | null
   note?: string | null
+  paidBy?: string | null
 }
 
 export async function recordInstallmentPayment(input: RecordInstallmentInput): Promise<ActionResult> {
@@ -241,8 +290,13 @@ export async function recordInstallmentPayment(input: RecordInstallmentInput): P
     }
 
     // 2. Decode existing payment installments or synthesize installment #1 from initial advance
-    const existingInstallments = decodePayments(targetTx.description, targetTx)
+    const existingInstallments =
+      targetTx.payment_history && targetTx.payment_history.length > 0
+        ? targetTx.payment_history
+        : decodePayments(targetTx.raw_description || targetTx.description, targetTx)
     const newInstallmentNumber = existingInstallments.length + 1
+
+    const payer = input.paidBy ? input.paidBy.trim() : (targetTx.paid_by || null)
 
     const newInstallment: PaymentInstallment = {
       installmentNumber: newInstallmentNumber,
@@ -251,6 +305,7 @@ export async function recordInstallmentPayment(input: RecordInstallmentInput): P
       paymentMethod: input.paymentMethod,
       referenceNumber: input.referenceNumber ? input.referenceNumber.trim() : null,
       note: input.note ? input.note.trim() : null,
+      paidBy: payer,
       createdAt: new Date().toISOString(),
     }
 
@@ -262,9 +317,18 @@ export async function recordInstallmentPayment(input: RecordInstallmentInput): P
     // Compute consolidated payment method (e.g. "Cash + UPI")
     const consolidatedMethod = getConsolidatedMethod(updatedInstallments, targetTx.payment_method)
 
-    // Preserve user clean notes and encode the full payment history
-    const baseNotes = cleanDescription(targetTx.description)
-    const updatedDescription = encodePayments(baseNotes, updatedInstallments)
+    // Preserve user clean notes and metadata, encode the full payment history
+    const baseNotes = cleanDescription(targetTx.raw_description || targetTx.description)
+    const metadata = {
+      referred_by: targetTx.referred_by || null,
+      referred_contact: targetTx.referred_contact || null,
+      paid_by: payer || targetTx.paid_by || null,
+    }
+    const updatedDescription = encodeFullDescription({
+      cleanNotes: baseNotes,
+      metadata,
+      payments: updatedInstallments,
+    })
 
     // 3. Update in Google Sheets
     if (getGoogleSheetsScriptUrl()) {

@@ -16,6 +16,7 @@ import type {
   TxType,
 } from '@/lib/types'
 import { getTxPaidPaise, getTxPendingPaise, getTxPaymentStatus } from '@/lib/types'
+import { decodePayments, cleanDescription, decodeTransactionMetadata } from '@/lib/installments'
 
 export type AuditEntry = {
   id: number
@@ -259,7 +260,10 @@ function readTransactionsFromWb(wb: ExcelJS.Workbook): Transaction[] {
       }
 
       if (id && transaction_date) {
-        transactions.push({
+        const rawDesc = cellValueToString(row.getCell(colMap.get('description') ?? (hasContactCol ? 11 : 10)).value) || null
+        const meta = decodeTransactionMetadata(rawDesc)
+
+        const txObj: Transaction = {
           id,
           transaction_date,
           type,
@@ -272,8 +276,14 @@ function readTransactionsFromWb(wb: ExcelJS.Workbook): Transaction[] {
           contact_number: contactCol ? cellValueToString(row.getCell(contactCol).value) || null : null,
           payment_method: cellValueToString(row.getCell(colMap.get('paymentmethod') ?? (hasContactCol ? 9 : 8)).value) || 'other',
           reference_number: cellValueToString(row.getCell(colMap.get('referencenumber') ?? (hasContactCol ? 10 : 9)).value) || null,
-          description: cellValueToString(row.getCell(colMap.get('description') ?? (hasContactCol ? 11 : 10)).value) || null,
-        })
+          description: cleanDescription(rawDesc),
+          raw_description: rawDesc,
+          referred_by: meta.referred_by || null,
+          referred_contact: meta.referred_contact || null,
+          paid_by: meta.paid_by || null,
+        }
+        txObj.payment_history = decodePayments(rawDesc, txObj)
+        transactions.push(txObj)
       }
     })
   }

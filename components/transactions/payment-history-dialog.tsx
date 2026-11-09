@@ -129,6 +129,11 @@ export function PaymentHistoryDialog({
                       <Calendar className="size-3" />
                       {formatDate(inst.date)}
                     </span>
+                    {(inst.paidBy || inst.paid_by) && (
+                      <span className="inline-flex items-center gap-1 font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px]">
+                        Paid by: {inst.paidBy || inst.paid_by}
+                      </span>
+                    )}
                     {inst.referenceNumber && (
                       <span className="font-mono">Ref: {inst.referenceNumber}</span>
                     )}

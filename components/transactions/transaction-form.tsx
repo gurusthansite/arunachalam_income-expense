@@ -105,6 +105,9 @@ export function TransactionForm({
   const [personName, setPersonName] = useState(initialData?.person_name ?? '')
   const [contactNumber, setContactNumber] = useState(initialData?.contact_number ?? '')
   const [paymentMethod, setPaymentMethod] = useState(initialData?.payment_method ?? 'upi')
+  const [referredBy, setReferredBy] = useState(initialData?.referred_by ?? '')
+  const [referredContact, setReferredContact] = useState(initialData?.referred_contact ?? '')
+  const [paidBy, setPaidBy] = useState(initialData?.paid_by ?? '')
   const [description, setDescription] = useState(initialNotes)
   const [referenceNumber, setReferenceNumber] = useState(initialData?.reference_number ?? '')
 
@@ -235,6 +238,9 @@ export function TransactionForm({
         contact_number: contactNumber.trim() || null,
         description: finalDescription,
         reference_number: referenceNumber.trim() || null,
+        referred_by: isIncome ? (referredBy.trim() || null) : null,
+        referred_contact: isIncome ? (referredContact.trim() || null) : null,
+        paid_by: !isIncome ? (paidBy.trim() || null) : null,
       }
 
       let res
@@ -648,6 +654,65 @@ export function TransactionForm({
               className="h-10"
             />
           </FormField>
+
+          {/* Income-specific: Referred By and Refer Contact */}
+          {isIncome && (
+            <>
+              <FormField
+                id="referred_by"
+                label="Referred By"
+                error={fieldErrors.referred_by}
+                hint="Optional person who referred this donor / income"
+              >
+                <Input
+                  id="referred_by"
+                  type="text"
+                  placeholder="e.g. Srikanth / Volunteer / Trustee"
+                  value={referredBy}
+                  onChange={(e) => setReferredBy(e.target.value)}
+                  maxLength={120}
+                  className="h-10"
+                />
+              </FormField>
+
+              <FormField
+                id="referred_contact"
+                label="Refer Contact"
+                error={fieldErrors.referred_contact}
+                hint="Optional phone number of the referrer"
+              >
+                <Input
+                  id="referred_contact"
+                  type="tel"
+                  placeholder="e.g. +91 98765 43210"
+                  value={referredContact}
+                  onChange={(e) => setReferredContact(e.target.value)}
+                  maxLength={30}
+                  className="h-10"
+                />
+              </FormField>
+            </>
+          )}
+
+          {/* Expense-specific: Payment By */}
+          {!isIncome && (
+            <FormField
+              id="paid_by"
+              label="Payment By (Who Paid)"
+              error={fieldErrors.paid_by}
+              hint="Optional person who paid / covered this expense"
+            >
+              <Input
+                id="paid_by"
+                type="text"
+                placeholder="e.g. Paid by Lohith / Trustee Name"
+                value={paidBy}
+                onChange={(e) => setPaidBy(e.target.value)}
+                maxLength={120}
+                className="h-10"
+              />
+            </FormField>
+          )}
         </div>
 
         {/* Description / Notes */}
