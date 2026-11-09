@@ -6,11 +6,16 @@
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('Ledger App')
+    .addItem('Update Summary Dashboard Formulas', 'setupSummarySheet')
     .addItem('Setup All Sheets', 'setupCompleteSheeting')
     .addItem('Add Paid, Pending & Phone Number Columns', 'updateSheetColumns')
     .addItem('Repair & Realign Data Rows', 'repairAndAlignDataRows')
     .addItem('Add Sample Transactions', 'addSampleTransactions')
     .addToUi();
+}
+
+function updateSummarySheet() {
+  setupSummarySheet();
 }
 
 /**
@@ -327,12 +332,15 @@ function setupSummarySheet(ss) {
   sheet.getRange('B6').setValue('Total Income (Inflow)').setFontWeight('bold').setFontColor('#047857');
   sheet.getRange('C6').setFormula('=SUMIF(Transactions!C2:C, "income", Transactions!D2:D)').setNumberFormat('+#,##0.00').setFontWeight('bold').setFontColor('#047857').setHorizontalAlignment('right');
 
-  sheet.getRange('B7').setValue('Total Expenses (Outflow)').setFontWeight('bold').setFontColor('#b91c1c');
-  sheet.getRange('C7').setFormula('=SUMIF(Transactions!C2:C, "expense", Transactions!D2:D)').setNumberFormat('-#,##0.00').setFontWeight('bold').setFontColor('#b91c1c').setHorizontalAlignment('right');
+  sheet.getRange('B7').setValue('Expenses Paid (Outflow)').setFontWeight('bold').setFontColor('#b91c1c');
+  sheet.getRange('C7').setFormula('=SUMIF(Transactions!C2:C, "expense", Transactions!E2:E)').setNumberFormat('-#,##0.00').setFontWeight('bold').setFontColor('#b91c1c').setHorizontalAlignment('right');
 
   sheet.getRange('B8').setValue('Current Net Balance').setFontWeight('bold');
   sheet.getRange('C8').setFormula('=C5 + C6 - C7').setNumberFormat('#,##0.00').setFontWeight('bold').setHorizontalAlignment('right');
   sheet.getRange('B8:C8').setBackground('#f1f5f9');
+
+  sheet.getRange('B9').setValue('Total Pending / Due').setFontWeight('bold').setFontColor('#d97706');
+  sheet.getRange('C9').setFormula('=SUMIF(Transactions!C2:C, "expense", Transactions!F2:F)').setNumberFormat('#,##0.00').setFontWeight('bold').setFontColor('#d97706').setHorizontalAlignment('right');
 
   // Block 2: Payment Methods Breakdown
   sheet.getRange('E4:F4').merge()
@@ -346,36 +354,37 @@ function setupSummarySheet(ss) {
   sheet.getRange('E5').setValue('Method').setFontWeight('bold');
   sheet.getRange('F5').setValue('Net Balance / In-Hand').setFontWeight('bold').setHorizontalAlignment('right');
 
+  // Payment methods are in Column J, Amount in D, Paid in E
   sheet.getRange('E6').setValue('Cash In Hand');
-  sheet.getRange('F6').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!H2:H, "Cash") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!H2:H, "Cash")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange('F6').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!J2:J, "Cash") - SUMIFS(Transactions!E2:E, Transactions!C2:C, "expense", Transactions!J2:J, "Cash")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
   sheet.getRange('E7').setValue('UPI Balance Flow');
-  sheet.getRange('F7').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!H2:H, "UPI") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!H2:H, "UPI")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange('F7').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!J2:J, "UPI") - SUMIFS(Transactions!E2:E, Transactions!C2:C, "expense", Transactions!J2:J, "UPI")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
   sheet.getRange('E8').setValue('Bank Transfer Flow');
-  sheet.getRange('F8').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!H2:H, "Bank Transfer") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!H2:H, "Bank Transfer")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange('F8').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!J2:J, "Bank Transfer") - SUMIFS(Transactions!E2:E, Transactions!C2:C, "expense", Transactions!J2:J, "Bank Transfer")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
   sheet.getRange('E9').setValue('Card / Others');
-  sheet.getRange('F9').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!H2:H, "Card") - SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!H2:H, "Card")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange('F9').setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!J2:J, "Card") - SUMIFS(Transactions!E2:E, Transactions!C2:C, "expense", Transactions!J2:J, "Card")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
 
   // Block 3: Category Summaries Header
-  sheet.getRange('B10:C10').merge()
+  sheet.getRange('B11:C11').merge()
     .setValue('INCOME BY CATEGORY')
     .setFontWeight('bold')
     .setFontColor('#ffffff')
     .setBackground('#065f46')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(10, 26);
+  sheet.setRowHeight(11, 26);
 
-  sheet.getRange('E10:F10').merge()
+  sheet.getRange('E11:F11').merge()
     .setValue('EXPENSES BY CATEGORY')
     .setFontWeight('bold')
     .setFontColor('#ffffff')
     .setBackground('#991b1b')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(10, 26);
+  sheet.setRowHeight(11, 26);
 
   var incomeCats = [
     'Donations',
@@ -385,10 +394,11 @@ function setupSummarySheet(ss) {
     'Other Income'
   ];
 
+  // Category is in Column G
   for (var i = 0; i < incomeCats.length; i++) {
-    var row = 11 + i;
+    var row = 12 + i;
     sheet.getRange(row, 2).setValue(incomeCats[i]);
-    sheet.getRange(row, 3).setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!E2:E, "' + incomeCats[i] + '")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+    sheet.getRange(row, 3).setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "income", Transactions!G2:G, "' + incomeCats[i] + '")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
   }
 
   var expenseCats = [
@@ -403,17 +413,18 @@ function setupSummarySheet(ss) {
     'Other Expenses'
   ];
 
+  // Category is in Column G
   for (var j = 0; j < expenseCats.length; j++) {
-    var r = 11 + j;
+    var r = 12 + j;
     sheet.getRange(r, 5).setValue(expenseCats[j]);
-    sheet.getRange(r, 6).setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!E2:E, "' + expenseCats[j] + '")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+    sheet.getRange(r, 6).setFormula('=SUMIFS(Transactions!D2:D, Transactions!C2:C, "expense", Transactions!G2:G, "' + expenseCats[j] + '")').setNumberFormat('#,##0.00').setHorizontalAlignment('right');
   }
 
   // Draw light borders
-  sheet.getRange('B4:C8').setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange('B4:C9').setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
   sheet.getRange('E4:F9').setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(10, 2, incomeCats.length + 1, 2).setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
-  sheet.getRange(10, 5, expenseCats.length + 1, 2).setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange(11, 2, incomeCats.length + 1, 2).setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange(11, 5, expenseCats.length + 1, 2).setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
 }
 
 function setupTransactionsSheet(ss) {

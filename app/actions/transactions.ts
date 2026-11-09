@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import * as excelStorage from '@/lib/excel-storage'
-import { getGoogleSheetsScriptUrl, postGoogleSheetsAction } from '@/lib/google-sheets'
+import { getGoogleSheetsScriptUrl, postGoogleSheetsAction, invalidateGoogleSheetsCache } from '@/lib/google-sheets'
 import { flattenErrors, transactionSchema, type TransactionInput } from '@/lib/validation'
 import { getCategories } from '@/lib/data'
 import type { ActionResult } from '@/lib/types'
@@ -80,6 +80,7 @@ export async function createTransaction(input: TransactionInput): Promise<Action
       console.warn('[excel-storage] local file write skipped (read-only filesystem):', excelErr.message)
     }
 
+    invalidateGoogleSheetsCache()
     revalidatePath('/', 'layout')
     return { ok: true, message: `${values.type === 'income' ? 'Income' : 'Expense'} saved successfully!` }
   } catch (error: any) {
@@ -149,6 +150,7 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
       console.warn('[excel-storage] local file update skipped:', excelErr.message)
     }
 
+    invalidateGoogleSheetsCache()
     revalidatePath('/', 'layout')
     return { ok: true, message: 'Transaction updated successfully!' }
   } catch (error: any) {
@@ -180,6 +182,7 @@ export async function deleteTransaction(id: string): Promise<ActionResult> {
       console.warn('[excel-storage] local file delete skipped:', excelErr.message)
     }
 
+    invalidateGoogleSheetsCache()
     revalidatePath('/', 'layout')
     return { ok: true, message: 'Transaction removed successfully!' }
   } catch (error: any) {

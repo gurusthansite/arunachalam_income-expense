@@ -13,7 +13,7 @@ export function getGoogleSheetsScriptUrl(): string {
 }
 
 let memoryCache: { data: any; timestamp: number } | null = null
-const CACHE_TTL_MS = 60000 // 60-second cache: makes page transitions instant (0ms) instead of waiting 4 seconds every time
+const CACHE_TTL_MS = 10000 // 10-second cache: keeps within-session navigation instant without serving stale data
 
 export function invalidateGoogleSheetsCache() {
   memoryCache = null
@@ -41,18 +41,12 @@ async function fetchFromGoogleSheets(): Promise<any> {
 
 async function fetchRawGoogleSheetsData() {
   const now = Date.now()
-  // 1. If we have fresh cached data (< 60s), return it immediately (0ms latency)
+  // If we have fresh cached data (< 10s), return it immediately
   if (memoryCache && now - memoryCache.timestamp < CACHE_TTL_MS) {
     return memoryCache.data
   }
 
-  // 2. If we have stale cache, return it immediately and refresh in background (Stale-While-Revalidate)
-  if (memoryCache) {
-    fetchFromGoogleSheets().catch(() => {})
-    return memoryCache.data
-  }
-
-  // 3. Otherwise fetch fresh data
+  // Otherwise fetch fresh data
   return await fetchFromGoogleSheets()
 }
 
@@ -138,10 +132,8 @@ export async function postGoogleSheetsAction(payload: any) {
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const result = await res.json()
-    // Revalidate cache in background after successful Google Sheets persistence
-    setTimeout(() => {
-      fetchFromGoogleSheets().catch(() => {})
-    }, 1000)
+    // Invalidate cache immediately so subsequent reads fetch fresh data
+    invalidateGoogleSheetsCache()
     return result
   } catch (err: any) {
     console.error('Error posting to Google Sheets:', err.message)

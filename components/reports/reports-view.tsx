@@ -36,6 +36,8 @@ import { formatDate } from '@/lib/dates'
 import { formatINR, paiseToDecimalString, type Paise } from '@/lib/money'
 import {
   paymentMethodLabel,
+  getTxPaidPaise,
+  getTxPendingPaise,
   type CategoryTotal,
   type FinancialSummary,
   type PaymentMethodTotal,
@@ -257,8 +259,10 @@ export function ReportsView({
                         let runningBalance = summary.periodOpeningPaise
                         return statementTransactions.map((tx) => {
                           const isIncome = tx.type === 'income'
+                          const paid = getTxPaidPaise(tx)
+                          const pending = getTxPendingPaise(tx)
                           if (isIncome) runningBalance += tx.amountPaise
-                          else runningBalance -= tx.amountPaise
+                          else runningBalance -= paid
 
                           return (
                             <TableRow key={tx.id}>
@@ -305,7 +309,18 @@ export function ReportsView({
                                 {isIncome ? formatINR(tx.amountPaise) : '—'}
                               </TableCell>
                               <TableCell className="text-right font-mono text-xs text-rose-700 font-medium">
-                                {!isIncome ? formatINR(tx.amountPaise) : '—'}
+                                {!isIncome ? (
+                                  <div>
+                                    <span>{formatINR(paid)}</span>
+                                    {pending > 0 && (
+                                      <span className="block text-[10px] text-amber-600 font-normal">
+                                        Due: {formatINR(pending)}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  '—'
+                                )}
                               </TableCell>
                               <TableCell
                                 className={`text-right font-mono text-xs font-semibold ${

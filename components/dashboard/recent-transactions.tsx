@@ -126,7 +126,7 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
                               : 'text-foreground'
                           }`}
                         >
-                          {isIncome ? `+₹${formatINR(Math.abs(tx.amountPaise))}` : `₹${formatINR(Math.abs(tx.amountPaise))}`}
+                          {isIncome ? `+${formatINR(Math.abs(tx.amountPaise))}` : formatINR(Math.abs(tx.amountPaise))}
                         </div>
                         {!isIncome && (
                           <div className="mt-0.5">
