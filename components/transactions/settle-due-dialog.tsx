@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   CreditCard,
@@ -50,14 +50,11 @@ export function SettleDueDialog({
   onSuccess,
 }: SettleDueDialogProps) {
   const router = useRouter()
-  if (!transaction) return null
+  const pendingPaise = transaction ? getTxPendingPaise(transaction) : 0
+  const alreadyPaidPaise = transaction ? getTxPaidPaise(transaction) : 0
+  const totalPaise = transaction ? transaction.amountPaise : 0
 
-  const totalPaise = transaction.amountPaise
-  const alreadyPaidPaise = getTxPaidPaise(transaction)
-  const pendingPaise = getTxPendingPaise(transaction)
-  const defaultAmountStr = paiseToDecimalString(pendingPaise)
-
-  const [amount, setAmount] = useState(defaultAmountStr)
+  const [amount, setAmount] = useState(transaction ? paiseToDecimalString(pendingPaise) : '0')
   const [date, setDate] = useState(todayIso())
   const [method, setMethod] = useState('upi')
   const [referenceNumber, setReferenceNumber] = useState('')
@@ -65,10 +62,23 @@ export function SettleDueDialog({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (transaction && open) {
+      setAmount(paiseToDecimalString(getTxPendingPaise(transaction)))
+      setDate(todayIso())
+      setMethod('upi')
+      setReferenceNumber('')
+      setNote('')
+      setError(null)
+    }
+  }, [transaction, open])
+
+  if (!transaction) return null
+
   // Reset when dialog opens for a new transaction
   function handleOpenChange(newOpen: boolean) {
-    if (newOpen) {
-      setAmount(paiseToDecimalString(pendingPaise))
+    if (newOpen && transaction) {
+      setAmount(paiseToDecimalString(getTxPendingPaise(transaction)))
       setDate(todayIso())
       setMethod('upi')
       setReferenceNumber('')

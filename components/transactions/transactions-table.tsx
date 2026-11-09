@@ -895,22 +895,26 @@ export function TransactionsTable({
       </AlertDialog>
 
       {/* Settle Due / Record Installment Dialog */}
-      <SettleDueDialog
-        transaction={settlingTx}
-        open={Boolean(settlingTx)}
-        onOpenChange={(open) => !open && setSettlingTx(null)}
-        onSuccess={() => {
-          setSettlingTx(null)
-          router.refresh()
-        }}
-      />
+      {settlingTx && (
+        <SettleDueDialog
+          transaction={settlingTx}
+          open={Boolean(settlingTx)}
+          onOpenChange={(open) => !open && setSettlingTx(null)}
+          onSuccess={() => {
+            setSettlingTx(null)
+            router.refresh()
+          }}
+        />
+      )}
 
       {/* Payment History Audit Trail Dialog */}
-      <PaymentHistoryDialog
-        transaction={historyTx}
-        open={Boolean(historyTx)}
-        onOpenChange={(open) => !open && setHistoryTx(null)}
-      />
+      {historyTx && (
+        <PaymentHistoryDialog
+          transaction={historyTx}
+          open={Boolean(historyTx)}
+          onOpenChange={(open) => !open && setHistoryTx(null)}
+        />
+      )}
     </div>
   )
 }
