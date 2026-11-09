@@ -470,45 +470,6 @@ export function TransactionsTable({
             )}
           </form>
 
-          {/* Date Range Toggle Button */}
-          <Button
-            type="button"
-            variant={currentFilters.from || currentFilters.to ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowDatePicker(!showDatePicker)}
-            className={cn(
-              'h-9 gap-1.5 text-xs font-medium whitespace-nowrap',
-              (currentFilters.from || currentFilters.to)
-                ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
-                : ''
-            )}
-            title="Filter by custom date range or preset"
-          >
-            <Calendar className="size-3.5" />
-            <span>
-              {currentFilters.from && currentFilters.to
-                ? `${formatDate(currentFilters.from)} – ${formatDate(currentFilters.to)}`
-                : currentFilters.from
-                  ? `From ${formatDate(currentFilters.from)}`
-                  : currentFilters.to
-                    ? `Up to ${formatDate(currentFilters.to)}`
-                    : 'Filter by Date'}
-            </span>
-            {(currentFilters.from || currentFilters.to) && (
-              <span
-                role="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  clearDateFilter()
-                }}
-                className="ml-1 rounded-full p-0.5 hover:bg-primary-foreground/20"
-                title="Clear Date Filter"
-              >
-                <X className="size-3" />
-              </span>
-            )}
-          </Button>
-
           {/* Category Filter */}
           <select
             aria-label="Filter by category"
@@ -541,92 +502,93 @@ export function TransactionsTable({
           </select>
         </div>
 
-        {/* Expandable Custom Date Range Selector Panel */}
-        {showDatePicker && (
-          <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-3.5 space-y-3 shadow-2xs animate-in fade-in-50 duration-200">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+        {/* Dedicated Date Range Filter Toolbar (Always Visible) */}
+        <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/[0.04] via-background to-primary/[0.02] p-3 shadow-2xs">
+          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+            {/* Quick Presets */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1 flex items-center gap-1">
                 <Calendar className="size-3.5 text-primary" />
-                Select Date Range
+                Date Range:
               </span>
-              <div className="flex flex-wrap items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setPresetDates('today')}
-                  className="rounded px-2.5 py-1 text-[11px] font-semibold bg-background border hover:bg-muted text-foreground transition-colors shadow-2xs"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPresetDates('this-month')}
-                  className="rounded px-2.5 py-1 text-[11px] font-semibold bg-background border hover:bg-muted text-foreground transition-colors shadow-2xs"
-                >
-                  This Month
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPresetDates('last-month')}
-                  className="rounded px-2.5 py-1 text-[11px] font-semibold bg-background border hover:bg-muted text-foreground transition-colors shadow-2xs"
-                >
-                  Last Month
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPresetDates('all')}
-                  className="rounded px-2.5 py-1 text-[11px] font-semibold bg-background border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shadow-2xs"
-                >
-                  All Time
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setPresetDates('today')}
+                className="rounded-md px-2.5 py-1 text-xs font-semibold bg-background border hover:bg-muted text-foreground transition-colors shadow-2xs"
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => setPresetDates('this-month')}
+                className="rounded-md px-2.5 py-1 text-xs font-semibold bg-background border hover:bg-muted text-foreground transition-colors shadow-2xs"
+              >
+                This Month
+              </button>
+              <button
+                type="button"
+                onClick={() => setPresetDates('last-month')}
+                className="rounded-md px-2.5 py-1 text-xs font-semibold bg-background border hover:bg-muted text-foreground transition-colors shadow-2xs"
+              >
+                Last Month
+              </button>
+              <button
+                type="button"
+                onClick={() => setPresetDates('all')}
+                className="rounded-md px-2 py-1 text-xs font-medium bg-background border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shadow-2xs"
+              >
+                All Time
+              </button>
             </div>
 
+            {/* Custom From & To Inputs */}
             <form
               onSubmit={(e) => {
                 e.preventDefault()
                 applyDateFilter()
               }}
-              className="flex flex-wrap items-end gap-3"
+              className="flex flex-wrap items-center gap-2"
             >
-              <div className="flex-1 min-w-[140px] space-y-1">
-                <label className="text-[11px] font-bold text-muted-foreground">From Date</label>
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">From</label>
                 <Input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="h-9 text-xs bg-background font-medium"
+                  className="h-8 w-36 text-xs bg-background font-medium"
                 />
               </div>
 
-              <div className="flex-1 min-w-[140px] space-y-1">
-                <label className="text-[11px] font-bold text-muted-foreground">To Date</label>
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">To</label>
                 <Input
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="h-9 text-xs bg-background font-medium"
+                  className="h-8 w-36 text-xs bg-background font-medium"
                 />
               </div>
 
-              <div className="flex items-center gap-2">
-                <Button type="submit" size="sm" className="h-9 text-xs px-4 font-semibold">
-                  Apply Dates
+              <Button type="submit" size="sm" className="h-8 text-xs px-3 font-semibold">
+                Apply
+              </Button>
+
+              {(currentFilters.from || currentFilters.to || fromDate || toDate) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearDateFilter}
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground px-2"
+                  title="Clear date filter"
+                >
+                  <X className="size-3.5 mr-1" />
+                  Clear
                 </Button>
-                {(currentFilters.from || currentFilters.to || fromDate || toDate) && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearDateFilter}
-                    className="h-9 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Clear Dates
-                  </Button>
-                )}
-              </div>
+              )}
             </form>
           </div>
-        )}
+        </div>
 
         {/* Active Date Filter Banner */}
         {Boolean(currentFilters.from || currentFilters.to) && (
