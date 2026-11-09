@@ -332,7 +332,15 @@ export async function getTransactions(filters: TransactionFilters) {
     all = all.filter((t) => t.type === filters.type)
   }
   if (filters.status && filters.status !== 'all') {
-    all = all.filter((t) => getTxPaymentStatus(t) === filters.status)
+    if (filters.status === 'pending') {
+      all = all.filter((t) => getTxPendingPaise(t) > 0)
+    } else if (filters.status === 'partial') {
+      all = all.filter((t) => getTxPaidPaise(t) > 0 && getTxPendingPaise(t) > 0)
+    } else if (filters.status === 'paid') {
+      all = all.filter((t) => getTxPendingPaise(t) <= 0)
+    } else {
+      all = all.filter((t) => getTxPaymentStatus(t) === filters.status)
+    }
   }
   if (filters.categoryId) {
     all = all.filter((t) => t.category_id === filters.categoryId)
