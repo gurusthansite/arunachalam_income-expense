@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -25,6 +25,8 @@ import {
   AlertTriangle,
   History,
   CreditCard,
+  Calendar,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -60,7 +62,7 @@ import { TransactionForm } from '@/components/transactions/transaction-form'
 import { SettleDueDialog } from '@/components/transactions/settle-due-dialog'
 import { PaymentHistoryDialog } from '@/components/transactions/payment-history-dialog'
 import { deleteTransaction } from '@/app/actions/transactions'
-import { formatDate } from '@/lib/dates'
+import { formatDate, todayIso, startOfMonth, endOfMonth, addMonths } from '@/lib/dates'
 import { formatINR } from '@/lib/money'
 import {
   paymentMethodLabel,
@@ -127,11 +129,58 @@ export function TransactionsTable({
   const searchParams = useSearchParams()
 
   const [searchInput, setSearchInput] = useState(currentFilters.q)
+  const [fromDate, setFromDate] = useState(currentFilters.from ?? '')
+  const [toDate, setToDate] = useState(currentFilters.to ?? '')
+  const [showDatePicker, setShowDatePicker] = useState(Boolean(currentFilters.from || currentFilters.to))
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null)
   const [settlingTx, setSettlingTx] = useState<Transaction | null>(null)
   const [historyTx, setHistoryTx] = useState<Transaction | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  useEffect(() => {
+    setFromDate(currentFilters.from ?? '')
+    setToDate(currentFilters.to ?? '')
+    if (currentFilters.from || currentFilters.to) {
+      setShowDatePicker(true)
+    }
+  }, [currentFilters.from, currentFilters.to])
+
+  function applyDateFilter(fromVal?: string | null, toVal?: string | null) {
+    const f = fromVal !== undefined ? fromVal : (fromDate || null)
+    const t = toVal !== undefined ? toVal : (toDate || null)
+    updateQuery({ from: f, to: t, range: f || t ? 'custom' : null })
+  }
+
+  function clearDateFilter() {
+    setFromDate('')
+    setToDate('')
+    updateQuery({ from: null, to: null, range: null })
+  }
+
+  function setPresetDates(preset: 'today' | 'this-month' | 'last-month' | 'all') {
+    const today = todayIso()
+    if (preset === 'today') {
+      setFromDate(today)
+      setToDate(today)
+      applyDateFilter(today, today)
+    } else if (preset === 'this-month') {
+      const f = startOfMonth(today)
+      const t = endOfMonth(today)
+      setFromDate(f)
+      setToDate(t)
+      applyDateFilter(f, t)
+    } else if (preset === 'last-month') {
+      const lm = addMonths(today, -1)
+      const f = startOfMonth(lm)
+      const t = endOfMonth(lm)
+      setFromDate(f)
+      setToDate(t)
+      applyDateFilter(f, t)
+    } else if (preset === 'all') {
+      clearDateFilter()
+    }
+  }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
 
@@ -385,6 +434,9 @@ export function TransactionsTable({
               className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
               onClick={() => {
                 setSearchInput('')
+                setFromDate('')
+                setToDate('')
+                setShowDatePicker(false)
                 router.push('/transactions')
               }}
             >
@@ -418,6 +470,45 @@ export function TransactionsTable({
             )}
           </form>
 
+          {/* Date Range Toggle Button */}
+          <Button
+            type="button"
+            variant={currentFilters.from || currentFilters.to ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowDatePicker(!showDatePicker)}
+            className={cn(
+              'h-9 gap-1.5 text-xs font-medium whitespace-nowrap',
+              (currentFilters.from || currentFilters.to)
+                ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
+                : ''
+            )}
+            title="Filter by custom date range or preset"
+          >
+            <Calendar className="size-3.5" />
+            <span>
+              {currentFilters.from && currentFilters.to
+                ? `${formatDate(currentFilters.from)} – ${formatDate(currentFilters.to)}`
+                : currentFilters.from
+                  ? `From ${formatDate(currentFilters.from)}`
+                  : currentFilters.to
+                    ? `Up to ${formatDate(currentFilters.to)}`
+                    : 'Filter by Date'}
+            </span>
+            {(currentFilters.from || currentFilters.to) && (
+              <span
+                role="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  clearDateFilter()
+                }}
+                className="ml-1 rounded-full p-0.5 hover:bg-primary-foreground/20"
+                title="Clear Date Filter"
+              >
+                <X className="size-3" />
+              </span>
+            )}
+          </Button>
+
           {/* Category Filter */}
           <select
             aria-label="Filter by category"
@@ -449,6 +540,120 @@ export function TransactionsTable({
             <option value="amount-asc">Amount (Lowest First)</option>
           </select>
         </div>
+
+        {/* Expandable Custom Date Range Selector Panel */}
+        {showDatePicker && (
+          <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-3.5 space-y-3 shadow-2xs animate-in fade-in-50 duration-200">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <Calendar className="size-3.5 text-primary" />
+                Select Date Range
+              </span>
+              <div className="flex flex-wrap items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPresetDates('today')}
+                  className="rounded px-2.5 py-1 text-[11px] font-semibold bg-background border hover:bg-muted text-foreground transition-colors shadow-2xs"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresetDates('this-month')}
+                  className="rounded px-2.5 py-1 text-[11px] font-semibold bg-background border hover:bg-muted text-foreground transition-colors shadow-2xs"
+                >
+                  This Month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresetDates('last-month')}
+                  className="rounded px-2.5 py-1 text-[11px] font-semibold bg-background border hover:bg-muted text-foreground transition-colors shadow-2xs"
+                >
+                  Last Month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresetDates('all')}
+                  className="rounded px-2.5 py-1 text-[11px] font-semibold bg-background border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shadow-2xs"
+                >
+                  All Time
+                </button>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                applyDateFilter()
+              }}
+              className="flex flex-wrap items-end gap-3"
+            >
+              <div className="flex-1 min-w-[140px] space-y-1">
+                <label className="text-[11px] font-bold text-muted-foreground">From Date</label>
+                <Input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="h-9 text-xs bg-background font-medium"
+                />
+              </div>
+
+              <div className="flex-1 min-w-[140px] space-y-1">
+                <label className="text-[11px] font-bold text-muted-foreground">To Date</label>
+                <Input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="h-9 text-xs bg-background font-medium"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button type="submit" size="sm" className="h-9 text-xs px-4 font-semibold">
+                  Apply Dates
+                </Button>
+                {(currentFilters.from || currentFilters.to || fromDate || toDate) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearDateFilter}
+                    className="h-9 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Clear Dates
+                  </Button>
+                )}
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Active Date Filter Banner */}
+        {Boolean(currentFilters.from || currentFilters.to) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/[0.05] px-3.5 py-2 text-xs text-primary font-medium">
+            <div className="flex items-center gap-2">
+              <Calendar className="size-4 shrink-0 text-primary" />
+              <span>
+                Viewing transactions from{' '}
+                <strong className="text-foreground underline decoration-primary/40 underline-offset-2">
+                  {currentFilters.from ? formatDate(currentFilters.from) : 'earliest recorded'}
+                </strong>{' '}
+                to{' '}
+                <strong className="text-foreground underline decoration-primary/40 underline-offset-2">
+                  {currentFilters.to ? formatDate(currentFilters.to) : 'latest'}
+                </strong>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={clearDateFilter}
+              className="inline-flex items-center gap-1 rounded bg-background border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground shadow-2xs"
+            >
+              <X className="size-3" />
+              Remove Date Filter
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Transactions Table with Premium Rows */}
