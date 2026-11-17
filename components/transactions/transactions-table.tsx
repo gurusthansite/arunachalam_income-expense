@@ -455,18 +455,39 @@ export function TransactionsTable({
               type="search"
               placeholder="Search by vendor, person, phone #, note, or reference…"
               value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="h-9 pl-9 pr-20 text-xs"
+              onChange={(e) => {
+                const val = e.target.value
+                setSearchInput(val)
+                if (val === '' && currentFilters.q) {
+                  updateQuery({ q: null })
+                }
+              }}
+              className="h-9 pl-9 pr-24 text-xs"
             />
             {searchInput && (
-              <Button
-                type="submit"
-                variant="ghost"
-                size="sm"
-                className="absolute right-1 top-1 h-7 px-2 text-xs text-primary"
-              >
-                Search
-              </Button>
+              <div className="absolute right-1 top-1 flex items-center gap-0.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchInput('')
+                    updateQuery({ q: null })
+                  }}
+                  className="h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  title="Clear search"
+                >
+                  <X className="size-3.5" />
+                </Button>
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-primary font-semibold"
+                >
+                  Search
+                </Button>
+              </div>
             )}
           </form>
 
@@ -750,9 +771,17 @@ export function TransactionsTable({
                           if (!tx.category_name.toLowerCase().includes('other') || !tx.description) return null
                           const [purpose] = tx.description.includes(' — ') ? tx.description.split(' — ') : [tx.description]
                           return (
-                            <span className="mt-0.5 block font-semibold text-primary text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearchInput(purpose)
+                                updateQuery({ q: purpose })
+                              }}
+                              className="mt-0.5 inline-flex items-center gap-1 font-semibold text-primary text-[11px] hover:underline bg-primary/10 px-1.5 py-0.5 rounded cursor-pointer transition-colors hover:bg-primary/20 text-left"
+                              title={`Click to filter by "${purpose}"`}
+                            >
                               ↳ {purpose}
-                            </span>
+                            </button>
                           )
                         })()}
                       </TableCell>

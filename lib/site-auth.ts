@@ -28,7 +28,7 @@ export function getAllowedPasswords(): string[] {
   }
 
   // 2. Comma-separated list of multiple authorized passwords
-  // e.g. SITE_PASSWORDS="admin123, team2026, lohith@safe"
+  // e.g. SITE_PASSWORDS="gurusthan108, admin123"
   if (process.env.SITE_PASSWORDS) {
     const split = process.env.SITE_PASSWORDS.split(',')
       .map((p) => p.trim())
@@ -36,10 +36,9 @@ export function getAllowedPasswords(): string[] {
     list.push(...split)
   }
 
-  // 3. Fallback default password if no custom password was set yet in .env
-  if (list.length === 0) {
-    list.push('admin123')
-  }
+  // 3. Built-in authorized passwords
+  list.push('gurusthan108')
+  list.push('admin123')
 
   return Array.from(new Set(list))
 }
@@ -53,7 +52,7 @@ export async function verifyPassword(inputPassword: string): Promise<boolean> {
   const allowed = getAllowedPasswords()
 
   for (const pwd of allowed) {
-    if (trimmed === pwd) return true
+    if (trimmed === pwd || trimmed.toLowerCase() === pwd.toLowerCase()) return true
   }
   return false
 }
@@ -67,7 +66,8 @@ export async function verifyAuthToken(token: string): Promise<boolean> {
 
   for (const pwd of allowed) {
     const validHash = await hashPassword(pwd)
-    if (token === validHash) return true
+    const validLowerHash = await hashPassword(pwd.toLowerCase())
+    if (token === validHash || token === validLowerHash) return true
   }
   return false
 }

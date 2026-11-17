@@ -19,7 +19,7 @@ export async function signInWithPassword(formData: FormData): Promise<ActionResu
     return { ok: false, error: 'Incorrect password. Access denied.' }
   }
 
-  const token = await hashPassword(password.trim())
+  const token = await hashPassword(password.trim().toLowerCase())
   const cookieStore = await cookies()
 
   // 30 days if remember me is checked, otherwise 24 hours
